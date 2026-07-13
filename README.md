@@ -1,6 +1,11 @@
 # 车辆保养管理系统
 
+[![Build and Publish Docker Images](https://github.com/<GITHUB_USER>/<GITHUB_REPO>/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/<GITHUB_USER>/<GITHUB_REPO>/actions/workflows/docker-publish.yml)
+
 记录车辆保养维修与油耗的自托管应用。后端 Node.js + Express + Prisma + PostgreSQL，前端 React + Vite + Ant Design（响应式，支持桌面/移动浏览器，并可作为 PWA 添加到手机主屏幕；后续可基于同一套 REST API 开发 iOS / Android 原生 App）。
+
+- GitHub 仓库：<https://github.com/<GITHUB_USER>/<GITHUB_REPO>>
+- Docker Hub 镜像：<https://hub.docker.com/r/<DOCKERHUB_USER>/vehicle-maintenance-backend>、<https://hub.docker.com/r/<DOCKERHUB_USER>/vehicle-maintenance-frontend>
 
 ## 功能
 
@@ -41,6 +46,32 @@ certs/      存放 SSL 证书（自行放入）
 3. 浏览器访问 `http://<服务器IP>`（默认 HTTP，见下方启用 HTTPS 说明）。
 
 服务包含：`postgres`（数据库）、`backend`（API）、`frontend`（静态站点）、`nginx`（反向代理，对外唯一入口，80/443 端口）、`backup`（每日自动备份）。
+
+### 使用 Docker Hub 上的预构建镜像（可选）
+
+默认 `docker-compose.yml` 里 `backend` / `frontend` 是本地构建（`build:`），首次启动会现场编译。如果不想本地构建，也可以直接拉取 CI 自动发布到 Docker Hub 的镜像，把 `docker-compose.yml` 里对应服务的 `build:` 换成：
+
+```yaml
+backend:
+  image: <DOCKERHUB_USER>/vehicle-maintenance-backend:latest
+frontend:
+  image: <DOCKERHUB_USER>/vehicle-maintenance-frontend:latest
+```
+
+镜像同时提供 `linux/amd64` 和 `linux/arm64`，Intel/Apple Silicon Mac、普通 x86 服务器都能直接拉取对应架构，无需本地编译。
+
+## 持续集成 / 自动发布
+
+`.github/workflows/docker-publish.yml` 会在每次 push 到 `main` 分支时，自动构建 `backend` / `frontend` 镜像并推送到 Docker Hub（打 `v1.0.0` 这样的 tag 时会额外打上对应版本号）。
+
+使用前需要在 GitHub 仓库的 `Settings -> Secrets and variables -> Actions` 里添加两个 repository secret：
+
+| Secret 名 | 说明 |
+|---|---|
+| `DOCKERHUB_USERNAME` | Docker Hub 用户名 |
+| `DOCKERHUB_TOKEN` | Docker Hub Access Token（在 Docker Hub 账号设置 -> Security -> New Access Token 生成，不要用登录密码） |
+
+添加好这两个 secret 后，后续每次推送代码到 `main` 都会自动完成"构建 → 推送 Docker Hub"，无需手动操作。
 
 ## 默认账号
 
