@@ -1,11 +1,11 @@
 # 车辆保养管理系统
 
-[![Build and Publish Docker Images](https://github.com/<GITHUB_USER>/<GITHUB_REPO>/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/<GITHUB_USER>/<GITHUB_REPO>/actions/workflows/docker-publish.yml)
+[![Build and Publish Docker Images](https://github.com/ZhangHowie/vehicle-maintenance-app/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/ZhangHowie/vehicle-maintenance-app/actions/workflows/docker-publish.yml)
 
 记录车辆保养维修与油耗的自托管应用。后端 Node.js + Express + Prisma + PostgreSQL，前端 React + Vite + Ant Design（响应式，支持桌面/移动浏览器，并可作为 PWA 添加到手机主屏幕；后续可基于同一套 REST API 开发 iOS / Android 原生 App）。
 
-- GitHub 仓库：<https://github.com/<GITHUB_USER>/<GITHUB_REPO>>
-- Docker Hub 镜像：<https://hub.docker.com/r/<DOCKERHUB_USER>/vehicle-maintenance-backend>、<https://hub.docker.com/r/<DOCKERHUB_USER>/vehicle-maintenance-frontend>
+- GitHub 仓库：<https://github.com/ZhangHowie/vehicle-maintenance-app>
+- Docker Hub 镜像：<https://hub.docker.com/r/howiez818/vehicle-maintenance-backend>、<https://hub.docker.com/r/howiez818/vehicle-maintenance-frontend>
 
 ## 功能
 
@@ -53,9 +53,9 @@ certs/      存放 SSL 证书（自行放入）
 
 ```yaml
 backend:
-  image: <DOCKERHUB_USER>/vehicle-maintenance-backend:latest
+  image: howiez818/vehicle-maintenance-backend:latest
 frontend:
-  image: <DOCKERHUB_USER>/vehicle-maintenance-frontend:latest
+  image: howiez818/vehicle-maintenance-frontend:latest
 ```
 
 镜像同时提供 `linux/amd64` 和 `linux/arm64`，Intel/Apple Silicon Mac、普通 x86 服务器都能直接拉取对应架构，无需本地编译。
