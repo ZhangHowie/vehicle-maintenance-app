@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.env
+*.log
+backend/uploads/*
+!backend/uploads/.gitkeep
+certs/*
+!certs/README.md
+postgres-data/
+.DS_Store
+*.tsbuildinfo
+vite.config.ts.timestamp-*.mjs

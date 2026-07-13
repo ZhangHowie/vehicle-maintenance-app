@@ -1,0 +1,135 @@
+// binaryTargets 覆盖 x86_64 / arm64 两种架构，避免构建与运行环境不一致导致引擎二进制不匹配
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum FuelType {
+  P92
+  P95
+  P98
+  DIESEL
+  ELECTRIC
+}
+
+model User {
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  passwordHash       String
+  totpSecret         String?
+  totpEnabled        Boolean   @default(false)
+  failedLoginCount   Int       @default(0)
+  lockedUntil        DateTime?
+  resetToken         String?
+  resetTokenExpires  DateTime?
+  // 首次使用默认管理员账号登录后，强制要求修改密码，改密成功后置为 false
+  mustChangePassword Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  vehicles      Vehicle[]
+  loginAttempts LoginAttempt[]
+}
+
+// 登录尝试记录，用于暴力破解检测与审计
+model LoginAttempt {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email     String
+  ip        String
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([ip, createdAt])
+  @@index([email, createdAt])
+}
+
+// IP 黑名单，命中后直接拒绝请求
+model IpBlacklist {
+  id        String    @id @default(uuid())
+  ip        String    @unique
+  reason    String?
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+}
+
+// 设备（车辆）
+model Vehicle {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  brand           String?
+  model           String?
+  plateNo         String?
+  coverImageUrl   String?
+  // 封面裁剪范围，例如 { x, y, width, height, zoom }，供多端按同一范围渲染封面
+  coverCrop       Json?
+  defaultFuelType FuelType @default(P92)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  maintenanceRecords MaintenanceRecord[]
+  fuelRecords        FuelRecord[]
+
+  @@index([userId])
+}
+
+// 单次保养记录
+model MaintenanceRecord {
+  id             String   @id @default(uuid())
+  vehicleId      String
+  vehicle        Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  date           DateTime
+  mileage        Int?
+  remark         String?
+  // 保养项目合计之外的整单优惠金额，totalPrice = 各项目合计 - discountAmount（不低于 0）
+  discountAmount Decimal  @default(0) @db.Decimal(10, 2)
+  totalPrice     Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  items MaintenanceItem[]
+
+  @@index([vehicleId, date])
+}
+
+// 保养项目明细：项目、品牌、个数、价格
+model MaintenanceItem {
+  id                   String            @id @default(uuid())
+  maintenanceRecordId  String
+  maintenanceRecord    MaintenanceRecord @relation(fields: [maintenanceRecordId], references: [id], onDelete: Cascade)
+  project              String
+  brand                String?
+  quantity             Int     @default(1)
+  price                Decimal @db.Decimal(10, 2)
+
+  @@index([maintenanceRecordId])
+}
+
+// 油耗记录
+model FuelRecord {
+  id           String   @id @default(uuid())
+  vehicleId    String
+  vehicle      Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  date         DateTime
+  mileage      Int
+  volume       Decimal  @db.Decimal(6, 2)
+  unitPrice    Decimal  @db.Decimal(6, 2)
+  fuelType     FuelType
+  // 是否跳枪（加油枪自动跳停，代表加满）
+  isFullTank   Boolean  @default(true)
+  // 上次加油是否有记录（影响油耗计算准确性）
+  lastRecorded Boolean  @default(true)
+  remark       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([vehicleId, date])
+}
