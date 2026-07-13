@@ -1,5 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Card, Tabs, Table, Button, Space, Popconfirm, message, Statistic, Row, Col, Tag, Empty, Segmented } from "antd";
+import {
+  Card,
+  Tabs,
+  Table,
+  Button,
+  Space,
+  Popconfirm,
+  message,
+  Statistic,
+  Row,
+  Col,
+  Tag,
+  Empty,
+  Segmented,
+  Modal,
+  Descriptions,
+} from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined, ToolOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import dayjs from "dayjs";
@@ -20,7 +36,7 @@ import { api } from "../api/client";
 import { fuelTypeLabel } from "../constants";
 import RecordFormModal, { RecordType } from "../components/RecordFormModal";
 import { notifyRecordsUpdated } from "../events";
-import { RECORD_THEME } from "../theme";
+import { BRAND, RECORD_THEME } from "../theme";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const ALL_YEARS = "all" as const;
@@ -48,14 +64,21 @@ export default function VehicleDetail() {
   const [vehicle, setVehicle] = useState<any>(null);
   const [maintenanceRecords, setMaintenanceRecords] = useState<any[]>([]);
   const [fuelRecords, setFuelRecords] = useState<any[]>([]);
-  const [stats, setStats] = useState<{ recentLitersPer100km: number | null; averageLitersPer100km: number | null }>({
+  const [stats, setStats] = useState<{
+    recentLitersPer100km: number | null;
+    averageLitersPer100km: number | null;
+    segments: { fromMileage: number; toMileage: number; date: string; litersPer100km: number }[];
+  }>({
     recentLitersPer100km: null,
     averageLitersPer100km: null,
+    segments: [],
   });
 
   const [modalState, setModalState] = useState<{ type: RecordType; recordId?: string; initialValues?: any } | null>(
     null
   );
+  // 点击某一条记录查看详情（只读），跟"编辑"是分开的入口
+  const [detailRecord, setDetailRecord] = useState<{ type: RecordType; record: any } | null>(null);
 
   // 默认按当前年份筛选统计和记录列表，也可以切到往年或"全部"
   const [year, setYear] = useState<YearFilter>(CURRENT_YEAR);
@@ -127,6 +150,47 @@ export default function VehicleDetail() {
       { name: "保养", value: Math.round(maintenanceCost * 100) / 100, color: RECORD_THEME.maintenance.color },
       { name: "油费", value: Math.round(fuelCost * 100) / 100, color: RECORD_THEME.fuel.color },
     ].filter((d) => d.value > 0);
+  }, [filteredMaintenance, filteredFuel]);
+
+  // 每条加油记录自己的百公里油耗：只有"加满"且成功和上一个加满点构成一段区间的记录才有值
+  // （对应 fuelStats 接口按里程算出的 segments，用 toMileage 对应到具体是哪条记录）。
+  const fuelEfficiencyByMileage = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const seg of stats.segments) map.set(seg.toMileage, seg.litersPer100km);
+    return map;
+  }, [stats.segments]);
+
+  // 本期（受年份筛选影响）汇总：总支出、总保养、总加油、平均每天行驶里程、平均每公里油费。
+  // 平均行驶里程 / 平均油费用"本期内里程最大值 - 最小值"除以"最早/最晚记录相差天数"来估算。
+  const periodStats = useMemo(() => {
+    const totalMaintenanceCost = filteredMaintenance.reduce((sum, r) => sum + Number(r.totalPrice), 0);
+    const totalFuelCost = filteredFuel.reduce((sum, r) => sum + Number(r.volume) * Number(r.unitPrice), 0);
+    const totalCost = totalMaintenanceCost + totalFuelCost;
+
+    const dated = [...filteredMaintenance, ...filteredFuel]
+      .filter((r) => typeof r.mileage === "number")
+      .map((r) => ({ date: dayjs(r.date), mileage: r.mileage as number }));
+
+    let avgDistancePerDay: number | null = null;
+    let avgFuelCostPerKm: number | null = null;
+    if (dated.length >= 2) {
+      const earliest = dated.reduce((a, b) => (a.date.isBefore(b.date) ? a : b));
+      const latest = dated.reduce((a, b) => (a.date.isAfter(b.date) ? a : b));
+      const mileageDelta = latest.mileage - earliest.mileage;
+      const daysDelta = Math.max(1, latest.date.diff(earliest.date, "day"));
+      if (mileageDelta > 0) {
+        avgDistancePerDay = mileageDelta / daysDelta;
+        avgFuelCostPerKm = totalFuelCost / mileageDelta;
+      }
+    }
+
+    return {
+      totalMaintenanceCost: Math.round(totalMaintenanceCost * 100) / 100,
+      totalFuelCost: Math.round(totalFuelCost * 100) / 100,
+      totalCost: Math.round(totalCost * 100) / 100,
+      avgDistancePerDay: avgDistancePerDay !== null ? Math.round(avgDistancePerDay * 10) / 10 : null,
+      avgFuelCostPerKm: avgFuelCostPerKm !== null ? Math.round(avgFuelCostPerKm * 100) / 100 : null,
+    };
   }, [filteredMaintenance, filteredFuel]);
 
   // 月支出趋势：选中具体年份就固定展示该年 1-12 月；选"全部"就展示这辆车从最早到最新记录跨越的每个月
@@ -227,7 +291,40 @@ export default function VehicleDetail() {
       </div>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={24} sm={8}>
+        <Col xs={12} sm={8}>
+          <Card style={{ borderTop: `3px solid ${BRAND.primary}`, borderRadius: 10 }}>
+            <Statistic
+              title={`总消费金额${year === ALL_YEARS ? "" : `（${year}）`}`}
+              value={periodStats.totalCost}
+              precision={2}
+              prefix="¥"
+              valueStyle={{ color: BRAND.primary }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8}>
+          <Card style={{ borderTop: `3px solid ${RECORD_THEME.maintenance.color}`, borderRadius: 10 }}>
+            <Statistic
+              title={`总保养金额${year === ALL_YEARS ? "" : `（${year}）`}`}
+              value={periodStats.totalMaintenanceCost}
+              precision={2}
+              prefix="¥"
+              valueStyle={{ color: RECORD_THEME.maintenance.color }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8}>
+          <Card style={{ borderTop: `3px solid ${RECORD_THEME.fuel.color}`, borderRadius: 10 }}>
+            <Statistic
+              title={`总加油金额${year === ALL_YEARS ? "" : `（${year}）`}`}
+              value={periodStats.totalFuelCost}
+              precision={2}
+              prefix="¥"
+              valueStyle={{ color: RECORD_THEME.fuel.color }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8}>
           <Card style={{ borderTop: `3px solid ${RECORD_THEME.fuel.color}`, borderRadius: 10 }}>
             <Statistic
               title="最近百公里油耗 (L)"
@@ -236,7 +333,34 @@ export default function VehicleDetail() {
             />
           </Card>
         </Col>
-        <Col xs={24} sm={8}>
+        <Col xs={12} sm={8}>
+          <Card style={{ borderTop: `3px solid ${RECORD_THEME.fuel.color}`, borderRadius: 10 }}>
+            <Statistic
+              title="平均百公里油耗 (L)"
+              value={stats.averageLitersPer100km ?? "暂无数据"}
+              valueStyle={{ color: RECORD_THEME.fuel.color }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8}>
+          <Card style={{ borderTop: `3px solid ${RECORD_THEME.fuel.color}`, borderRadius: 10 }}>
+            <Statistic
+              title={`平均油费 (元/km)${year === ALL_YEARS ? "" : `（${year}）`}`}
+              value={periodStats.avgFuelCostPerKm ?? "暂无数据"}
+              valueStyle={{ color: RECORD_THEME.fuel.color }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8}>
+          <Card style={{ borderTop: `3px solid ${BRAND.primary}`, borderRadius: 10 }}>
+            <Statistic
+              title={`平均行驶 (km/天)${year === ALL_YEARS ? "" : `（${year}）`}`}
+              value={periodStats.avgDistancePerDay ?? "暂无数据"}
+              valueStyle={{ color: BRAND.primary }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8}>
           <Card style={{ borderTop: `3px solid ${RECORD_THEME.maintenance.color}`, borderRadius: 10 }}>
             <Statistic
               title="保养记录数"
@@ -245,7 +369,7 @@ export default function VehicleDetail() {
             />
           </Card>
         </Col>
-        <Col xs={24} sm={8}>
+        <Col xs={12} sm={8}>
           <Card style={{ borderTop: `3px solid ${RECORD_THEME.fuel.color}`, borderRadius: 10 }}>
             <Statistic
               title="油耗记录数"
@@ -362,6 +486,10 @@ export default function VehicleDetail() {
                   rowKey="id"
                   dataSource={filteredMaintenance}
                   scroll={{ x: true }}
+                  onRow={(r) => ({
+                    onClick: () => setDetailRecord({ type: "maintenance", record: r }),
+                    style: { cursor: "pointer" },
+                  })}
                   columns={[
                     { title: "日期", dataIndex: "date", render: (v) => dayjs(v).format("YYYY-MM-DD") },
                     { title: "里程(km)", dataIndex: "mileage" },
@@ -380,7 +508,7 @@ export default function VehicleDetail() {
                     {
                       title: "操作",
                       render: (_: any, r: any) => (
-                        <Space>
+                        <Space onClick={(e) => e.stopPropagation()}>
                           <a onClick={() => setModalState({ type: "maintenance", recordId: r.id, initialValues: r })}>
                             编辑
                           </a>
@@ -418,18 +546,25 @@ export default function VehicleDetail() {
                   rowKey="id"
                   dataSource={filteredFuel}
                   scroll={{ x: true }}
+                  onRow={(r) => ({
+                    onClick: () => setDetailRecord({ type: "fuel", record: r }),
+                    style: { cursor: "pointer" },
+                  })}
                   columns={[
                     { title: "日期", dataIndex: "date", render: (v) => dayjs(v).format("YYYY-MM-DD") },
                     { title: "里程(km)", dataIndex: "mileage" },
-                    { title: "加油量(L)", dataIndex: "volume" },
-                    { title: "单价", dataIndex: "unitPrice" },
-                    { title: "油品", dataIndex: "fuelType", render: fuelTypeLabel },
-                    { title: "是否跳枪", dataIndex: "isFullTank", render: (v) => (v ? "是" : "否") },
-                    { title: "上次是否记录", dataIndex: "lastRecorded", render: (v) => (v ? "是" : "否") },
+                    {
+                      title: "百公里油耗(L)",
+                      dataIndex: "mileage",
+                      render: (mileage: number) => {
+                        const v = fuelEfficiencyByMileage.get(mileage);
+                        return v !== undefined ? v : "-";
+                      },
+                    },
                     {
                       title: "操作",
                       render: (_: any, r: any) => (
-                        <Space>
+                        <Space onClick={(e) => e.stopPropagation()}>
                           <a onClick={() => setModalState({ type: "fuel", recordId: r.id, initialValues: r })}>编辑</a>
                           <Popconfirm title="确认删除？" onConfirm={() => deleteFuel(r.id)}>
                             <a>删除</a>
@@ -456,6 +591,117 @@ export default function VehicleDetail() {
           onClose={() => setModalState(null)}
           onSuccess={handleModalSuccess}
         />
+      )}
+
+      {detailRecord && (
+        <Modal
+          open={Boolean(detailRecord)}
+          onCancel={() => setDetailRecord(null)}
+          width={520}
+          title={
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 26,
+                  height: 26,
+                  borderRadius: 7,
+                  background: RECORD_THEME[detailRecord.type].tint,
+                  color: RECORD_THEME[detailRecord.type].color,
+                  fontSize: 14,
+                }}
+              >
+                {detailRecord.type === "maintenance" ? <ToolOutlined /> : <ThunderboltOutlined />}
+              </span>
+              {detailRecord.type === "maintenance" ? "保养记录详情" : "油耗记录详情"}
+            </span>
+          }
+          footer={[
+            <Button key="close" onClick={() => setDetailRecord(null)}>
+              关闭
+            </Button>,
+            <Button
+              key="edit"
+              type="primary"
+              icon={<EditOutlined />}
+              style={{
+                background: RECORD_THEME[detailRecord.type].color,
+                borderColor: RECORD_THEME[detailRecord.type].color,
+              }}
+              onClick={() => {
+                const r = detailRecord.record;
+                setModalState({ type: detailRecord.type, recordId: r.id, initialValues: r });
+                setDetailRecord(null);
+              }}
+            >
+              编辑
+            </Button>,
+          ]}
+        >
+          {detailRecord.type === "maintenance" ? (
+            <>
+              <Descriptions bordered size="small" column={2}>
+                <Descriptions.Item label="日期">
+                  {dayjs(detailRecord.record.date).format("YYYY-MM-DD")}
+                </Descriptions.Item>
+                <Descriptions.Item label="里程">{detailRecord.record.mileage ?? "-"} km</Descriptions.Item>
+                <Descriptions.Item label="优惠金额">
+                  {Number(detailRecord.record.discountAmount) > 0
+                    ? `-¥${Number(detailRecord.record.discountAmount).toFixed(2)}`
+                    : "-"}
+                </Descriptions.Item>
+                <Descriptions.Item label="总价">
+                  ¥{Number(detailRecord.record.totalPrice).toFixed(2)}
+                </Descriptions.Item>
+                <Descriptions.Item label="备注" span={2}>
+                  {detailRecord.record.remark || "-"}
+                </Descriptions.Item>
+              </Descriptions>
+              <div style={{ margin: "16px 0 8px", fontSize: 13, fontWeight: 600, color: "#333" }}>保养项目明细</div>
+              <Table
+                size="small"
+                pagination={false}
+                rowKey={(_: any, i?: number) => String(i)}
+                dataSource={detailRecord.record.items ?? []}
+                columns={[
+                  { title: "项目", dataIndex: "project" },
+                  { title: "品牌", dataIndex: "brand", render: (v: string | null) => v || "-" },
+                  { title: "个数", dataIndex: "quantity" },
+                  { title: "单价", dataIndex: "price", render: (v: number) => `¥${Number(v).toFixed(2)}` },
+                  {
+                    title: "金额",
+                    render: (_: any, item: any) => `¥${(Number(item.quantity) * Number(item.price)).toFixed(2)}`,
+                  },
+                ]}
+              />
+            </>
+          ) : (
+            <Descriptions bordered size="small" column={2}>
+              <Descriptions.Item label="日期">{dayjs(detailRecord.record.date).format("YYYY-MM-DD")}</Descriptions.Item>
+              <Descriptions.Item label="里程">{detailRecord.record.mileage} km</Descriptions.Item>
+              <Descriptions.Item label="加油量">{Number(detailRecord.record.volume).toFixed(2)} L</Descriptions.Item>
+              <Descriptions.Item label="单价">¥{Number(detailRecord.record.unitPrice).toFixed(2)}</Descriptions.Item>
+              <Descriptions.Item label="总金额">
+                ¥{(Number(detailRecord.record.volume) * Number(detailRecord.record.unitPrice)).toFixed(2)}
+              </Descriptions.Item>
+              <Descriptions.Item label="该次百公里油耗">
+                {fuelEfficiencyByMileage.get(detailRecord.record.mileage) !== undefined
+                  ? `${fuelEfficiencyByMileage.get(detailRecord.record.mileage)} L`
+                  : "暂无数据"}
+              </Descriptions.Item>
+              <Descriptions.Item label="油品">{fuelTypeLabel(detailRecord.record.fuelType)}</Descriptions.Item>
+              <Descriptions.Item label="是否跳枪">{detailRecord.record.isFullTank ? "是" : "否"}</Descriptions.Item>
+              <Descriptions.Item label="上次是否记录" span={2}>
+                {detailRecord.record.lastRecorded ? "是" : "否"}
+              </Descriptions.Item>
+              <Descriptions.Item label="备注" span={2}>
+                {detailRecord.record.remark || "-"}
+              </Descriptions.Item>
+            </Descriptions>
+          )}
+        </Modal>
       )}
     </div>
   );
