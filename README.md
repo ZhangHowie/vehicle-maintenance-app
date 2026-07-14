@@ -31,6 +31,16 @@ certs/      存放 SSL 证书（自行放入）
 
 ## 快速开始
 
+0. **获取完整项目文件**——`backend/`、`frontend/`、`nginx/`、`scripts/` 这些文件夹都是仓库里现成的，包含 Dockerfile 和源代码，**不需要也不能手动新建空文件夹**（`build:` 需要文件夹里的 Dockerfile 和源码才能构建镜像，空文件夹会报 `unable to prepare context` 之类的错误）。二选一：
+
+   - **git clone（推荐）**，会完整带上所有文件夹和层级：
+
+     ```bash
+     git clone https://github.com/ZhangHowie/vehicle-maintenance-app.git
+     ```
+
+   - **下载 ZIP**：GitHub 仓库页面绿色 "Code" 按钮 -> "Download ZIP"。解压后会得到一个 `vehicle-maintenance-app-main` 文件夹，**把这个文件夹里面的内容**（而不是这个文件夹本身）放到你在 NAS 上准备好的项目目录里，确保 `docker-compose.yml` 跟 `backend/`、`frontend/`、`nginx/`、`scripts/` 直接平铺在同一层，中间不要多套一层目录——这是 NAS 部署时最容易踩的坑。
+
 1. 复制环境变量文件并修改（数据库密码、JWT 密钥、SMTP 邮箱等务必修改为自己的值）：
 
    ```bash
