@@ -39,21 +39,36 @@ certs/      存放 SSL 证书（自行放入，两种部署方式都需要，仅
    - [`docker-compose.yml`](https://raw.githubusercontent.com/ZhangHowie/vehicle-maintenance-app/main/docker-compose.yml)
    - [`.env.example`](https://raw.githubusercontent.com/ZhangHowie/vehicle-maintenance-app/main/.env.example)，下载后改名为 `.env`
 
-2. 编辑 `.env`，把数据库密码、JWT 密钥、SMTP 邮箱等改成自己的值（必改，不要用示例里的默认值）。
+2. 在这个目录下新建一个空的 `certs` 子目录（哪怕不用 HTTPS 也要建，`docker-compose.yml` 里 nginx 服务挂载了这个目录，Docker 不会自动创建不存在的宿主机目录，缺了会报 `Bind mount failed`）：
 
-3. 在这个目录下启动：
+   ```bash
+   mkdir -p certs
+   ```
+
+3. 编辑 `.env`，把数据库密码、JWT 密钥、SMTP 邮箱等改成自己的值（必改，不要用示例里的默认值）。
+
+4. 在这个目录下启动：
 
    ```bash
    docker compose up -d
    ```
 
-   Docker 会自动从 Docker Hub 拉取 `howiez818/vehicle-maintenance-{backend,frontend,nginx,backup}:latest` 以及官方的 `postgres:16-alpine`，不会在本机构建任何镜像。首次拉取后会自动创建 `postgres-data`、`uploads-data`、`backup-data` 三个 Docker 数据卷用于持久化，无需手动建文件夹。
+   Docker 会自动从 Docker Hub 拉取 `howiez818/vehicle-maintenance-{backend,frontend,nginx,backup}:latest` 以及官方的 `postgres:16-alpine`，不会在本机构建任何镜像。首次启动后会自动创建 `postgres-data`、`uploads-data`、`backup-data` 三个 Docker 数据卷用于持久化数据（这三个是 Docker 卷，不是本地文件夹，不需要手动创建）。
 
-4. 浏览器访问 `http://<服务器IP>:8082`（默认 HTTP 端口 8082，见下方启用 HTTPS 说明）。
+5. 浏览器访问 `http://<服务器IP>:8082`（默认 HTTP 端口 8082，见下方启用 HTTPS 说明）。
+
+此时的项目目录应该长这样：
+
+```
+vehicle-app/
+├── docker-compose.yml
+├── .env
+└── certs/        （空目录，不用 HTTPS 的话保持空即可）
+```
 
 服务包含：`postgres`（数据库）、`backend`（API）、`frontend`（静态站点）、`nginx`（反向代理，对外唯一入口，默认宿主机 8082/8083 端口，见下方说明）、`backup`（每日自动备份）。
 
-想启用 HTTPS 的话才需要额外准备 `certs/` 目录（放证书）和一份自定义 nginx 配置文件，见下方「启用 HTTPS」一节，其余场景 `certs/` 目录留空即可。
+想启用 HTTPS 的话，`certs/` 目录里还要放证书文件，并额外准备一份自定义 nginx 配置文件，见下方「启用 HTTPS」一节。
 
 ### 修改对外端口（默认 8082 / 8083）
 
