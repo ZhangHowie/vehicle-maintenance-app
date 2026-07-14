@@ -185,7 +185,7 @@ Authorization: Bearer <accessToken>
 
 | 方法 | 路径 | 说明 | 需要登录 |
 |---|---|---|---|
-| GET | `/api/health` | 健康检查 | 否 |
+| GET | `/api/health` | 健康检查，同时返回版本信息：`{ status, version, commit }`（`version` 见 `src/version.ts`，`commit` 是构建镜像时 CI 注入的 git commit sha，本地开发环境为 `"dev"`）；前端「账户设置」页面用这个接口显示后端版本 | 否 |
 | GET | `/uploads/:filename` | 静态访问已上传的车辆封面图片 | 否（图片本身不含敏感信息） |
 
 ## 错误响应格式

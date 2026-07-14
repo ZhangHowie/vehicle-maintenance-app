@@ -193,6 +193,17 @@ const coverImageSchema = z
   .nullable()
   .optional();
 
+// 里程、数量在数据库里是 Int 字段，如果直接把浮点数传给 Prisma 会抛
+// PrismaClientValidationError（比如 "Expected Int, provided Float."），在事务里
+// 表现为一次莫名其妙的 500。这里统一 round 成整数，防患于未然——正常的里程数/
+// 保养项目数量本来也不应该是小数。
+const toIntOrNull = z.coerce
+  .number()
+  .nullable()
+  .optional()
+  .transform((v) => (v === null || v === undefined ? v : Math.round(v)));
+const toInt = z.coerce.number().transform((v) => Math.round(v));
+
 // 这份 zod schema 对 v1/v2 都通用：v1 导出的文件里没有 coverImage/coverCrop 字段，
 // 在这里都是 .nullable().optional()，缺失时会落到 undefined，自然跳过图片导入，
 // 不会因为老版本文件缺字段而校验失败。
@@ -208,14 +219,14 @@ const vehicleImportSchema = z.object({
     .array(
       z.object({
         date: z.string(),
-        mileage: z.coerce.number().nullable().optional(),
+        mileage: toIntOrNull,
         remark: z.string().nullable().optional(),
         discountAmount: z.coerce.number().nonnegative().nullable().optional().default(0),
         items: z.array(
           z.object({
             project: z.string(),
             brand: z.string().nullable().optional(),
-            quantity: z.coerce.number(),
+            quantity: toInt,
             price: z.coerce.number(),
           })
         ),
@@ -226,7 +237,7 @@ const vehicleImportSchema = z.object({
     .array(
       z.object({
         date: z.string(),
-        mileage: z.coerce.number(),
+        mileage: toInt,
         volume: z.coerce.number(),
         unitPrice: z.coerce.number(),
         fuelType: fuelTypeEnum,

@@ -15,6 +15,10 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
+# CI 构建时通过 --build-arg GIT_COMMIT=<sha> 注入，暴露在 /api/health 里，
+# 方便确认 NAS 上跑的镜像是不是已经拉到了最新的一次推送（见 src/version.ts）。
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=$GIT_COMMIT
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev

@@ -23,14 +23,21 @@ jobs:
     strategy:
       matrix:
         include:
+          # buildArgs 把当次推送的 commit sha 注入镜像（backend 存到运行时 env，frontend
+          # 在构建时打进静态产物），对应 src/version.ts / 「账户设置」页面的版本信息展示，
+          # 用来确认 NAS 上拉到的镜像是不是已经是最新的。nginx/backup 不需要，留空。
           - image: backend
             context: ./backend
+            buildArgs: "GIT_COMMIT=${{ github.sha }}"
           - image: frontend
             context: ./frontend
+            buildArgs: "VITE_GIT_COMMIT=${{ github.sha }}"
           - image: nginx
             context: ./nginx
+            buildArgs: ""
           - image: backup
             context: ./scripts
+            buildArgs: ""
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -65,5 +72,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.buildArgs }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}

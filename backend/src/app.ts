@@ -6,6 +6,7 @@ import { env } from "./config/env";
 import { apiLimiter } from "./middleware/rateLimit";
 import { blacklistGuard } from "./middleware/blacklist";
 import { errorHandler, notFoundHandler, asyncHandler } from "./middleware/errorHandler";
+import { APP_VERSION, GIT_COMMIT } from "./version";
 
 import authRoutes from "./routes/auth.routes";
 import vehicleRoutes from "./routes/vehicle.routes";
@@ -18,7 +19,9 @@ const app = express();
 app.set("trust proxy", 1);
 
 // 健康检查放在最前面，且不依赖数据库，避免数据库瞬时不可用时容器被误判为 unhealthy
-app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/api/health", (_req, res) =>
+  res.json({ status: "ok", version: APP_VERSION, commit: GIT_COMMIT })
+);
 
 app.use(helmet());
 app.use(
