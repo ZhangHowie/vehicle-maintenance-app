@@ -34,6 +34,7 @@ function CardTitle({ icon, children }: { icon: React.ReactNode; children: React.
 export default function Settings() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   async function onChangePassword(values: { currentPassword: string; newPassword: string; confirm: string }) {
     if (values.newPassword !== values.confirm) {
@@ -62,13 +63,26 @@ export default function Settings() {
   }
 
   async function importData(file: File) {
+    setImporting(true);
     try {
       const text = await file.text();
       const json = JSON.parse(text);
       const res = await api.post("/data/import", json);
-      message.success(`导入成功：车辆 ${res.data.importedVehicles} 辆，保养记录 ${res.data.importedMaintenance} 条，油耗记录 ${res.data.importedFuel} 条`);
+      const { importedVehicles, importedMaintenance, importedFuel, importedImages } = res.data;
+      message.success(
+        `导入成功：车辆 ${importedVehicles} 辆（含封面图片 ${importedImages ?? 0} 张），保养记录 ${importedMaintenance} 条，油耗记录 ${importedFuel} 条`
+      );
+      // 导入的车辆/记录不会自动出现在当前页面已加载的数据里，刷新一下让首页、车辆列表
+      // 立刻看到导入结果，避免用户以为“导入成功了但数据没变”。
+      window.setTimeout(() => window.location.reload(), 800);
     } catch (e: any) {
-      message.error(e?.response?.data?.message ?? "导入失败，请检查文件格式");
+      if (e instanceof SyntaxError) {
+        message.error("导入失败：文件不是有效的 JSON，请选择本系统导出的备份文件");
+      } else {
+        message.error(e?.response?.data?.message ?? "导入失败，请检查文件格式");
+      }
+    } finally {
+      setImporting(false);
     }
     return false;
   }
@@ -123,7 +137,9 @@ export default function Settings() {
           </Space>
           <Divider style={{ margin: "8px 0" }} />
           <Upload beforeUpload={importData} showUploadList={false} accept="application/json">
-            <Button icon={<UploadOutlined />}>导入 JSON 数据</Button>
+            <Button icon={<UploadOutlined />} loading={importing}>
+              {importing ? "正在导入…" : "导入 JSON 数据"}
+            </Button>
           </Upload>
           <div
             style={{
@@ -131,6 +147,21 @@ export default function Settings() {
               alignItems: "flex-start",
               gap: 8,
               marginTop: 4,
+              padding: "8px 12px",
+              background: "#fafafa",
+              borderRadius: 8,
+              color: "#888",
+              fontSize: 12,
+            }}
+          >
+            <RightOutlined style={{ fontSize: 10, marginTop: 3 }} />
+            导入不会覆盖或删除现有数据，只会新增；导入的 JSON 需要是本系统「导出 JSON」生成的文件（含封面图片，导入到全新环境也能恢复图片）。整批导入是原子操作：其中任何一辆车、任何一条记录有问题都会整体失败并回滚，不会出现部分导入、数据不完整的情况。
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
               padding: "8px 12px",
               background: "#fafafa",
               borderRadius: 8,

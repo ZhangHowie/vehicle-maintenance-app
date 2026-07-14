@@ -10,7 +10,7 @@
 # 别的值，或者用的是标准 443 端口，记得把下面这一行的 8083 也同步改掉，
 # 否则跳转会带着错误的端口号，浏览器打不开。
 
-client_max_body_size 20m;
+client_max_body_size 50m;
 
 server {
     listen 80;

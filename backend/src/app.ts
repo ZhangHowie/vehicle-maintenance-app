@@ -27,7 +27,12 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: "2mb" }));
+// 数据导入接口 (/api/data/import) 需要内嵌车辆封面图片的 base64，请求体会比其它接口大得多，
+// 单独跳过这里的全局体积限制，改由 data.routes.ts 里针对该路由单独设置更大的 limit。
+app.use((req, res, next) => {
+  if (req.path === "/api/data/import") return next();
+  return express.json({ limit: "2mb" })(req, res, next);
+});
 // 用 asyncHandler 包裹，避免黑名单查询（数据库调用）出现异常时导致进程崩溃
 app.use(asyncHandler(blacklistGuard));
 app.use("/api", apiLimiter);

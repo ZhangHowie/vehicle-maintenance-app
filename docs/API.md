@@ -103,9 +103,53 @@ Authorization: Bearer <accessToken>
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/export?format=json` | 导出全部车辆及记录为 JSON 文件下载 |
-| GET | `/export?format=csv` | 导出为 CSV + 原始 JSON 打包的 zip 文件下载 |
-| POST | `/import` | 导入 `export?format=json` 格式的 JSON（作为请求体），批量重建车辆/保养/油耗记录（不含图片文件） |
+| GET | `/export?format=json` | 导出全部车辆及记录为 JSON 文件下载（含封面图片，见下方格式说明） |
+| GET | `/export?format=csv` | 导出为 CSV + 完整 JSON（`full_export.json`，跟 `export?format=json` 同一份内容）打包的 zip 文件下载 |
+| POST | `/import` | 导入 `export?format=json` 产出的 JSON（作为请求体），批量重建车辆/保养/油耗记录/封面图片 |
+
+### 导出文件格式（`schemaVersion`）
+
+导出的 JSON 顶层带一个 `schemaVersion` 字段，标识车辆/记录/图片这部分数据结构的版本号，跟应用本身的版本号是两回事——只要这部分导出结构没变，应用升级多少次 `schemaVersion` 都不需要跟着变；只有导出结构发生不兼容变化时才会递增。`/import` 接口会根据这个字段自动兼容老版本导出的文件：
+
+- **v1**（早期版本导出的文件，字段名是 `version` 而不是 `schemaVersion`）：车辆基本信息 + 保养/油耗记录，不含封面图片。
+- **v2**（当前版本）：在 v1 基础上，每辆车新增 `coverImage`（封面图片，图片内容以 `dataBase64` 直接内嵌在 JSON 里，不是只存一个指向本机文件的 URL——这样导入到另一台机器、或者换了一个全新的 `uploads` 数据卷，图片依然能被正确恢复）和 `coverCrop`（封面裁剪范围）。
+
+```json
+{
+  "schemaVersion": 2,
+  "exportedAt": "2026-07-14T00:00:00.000Z",
+  "vehicleCount": 2,
+  "vehicles": [
+    {
+      "name": "我的轿车", "brand": "丰田", "model": "凯美瑞", "plateNo": "京A12345",
+      "defaultFuelType": "P95",
+      "coverImage": { "filename": "xxx.jpg", "mimeType": "image/jpeg", "dataBase64": "..." },
+      "coverCrop": { "x": 0, "y": 0, "width": 100, "height": 56, "zoom": 1 },
+      "maintenanceRecords": [
+        { "date": "2026-01-01T00:00:00.000Z", "mileage": 12000, "remark": "换机油", "discountAmount": 10,
+          "items": [{ "project": "机油", "brand": "美孚", "quantity": 1, "price": 300 }] }
+      ],
+      "fuelRecords": [
+        { "date": "2026-01-02T00:00:00.000Z", "mileage": 12100, "volume": 40, "unitPrice": 7.8,
+          "fuelType": "P95", "isFullTank": true, "lastRecorded": true, "remark": null }
+      ]
+    }
+  ]
+}
+```
+
+导入接口的行为：
+
+- **不会覆盖或删除已有数据**，导入内容以新增车辆的形式加入当前账号，可以重复导入。
+- **整批导入是一个数据库事务**：任意一辆车、任意一条记录校验或写入失败，整批全部回滚，不会出现"导出时有 2 辆车，导入后却只剩 1 辆"这种因为中途失败导致的部分导入。失败时返回 `400`，`message` 里会写明具体是哪辆车/哪个字段有问题。
+- **拒绝"来自未来"的导出文件**：如果导出文件的 `schemaVersion` 比当前系统支持的版本更新（比如用新版本导出、拿到旧版本系统导入），会直接返回 `400` 拒绝，而不是静默丢弃新增字段导致数据不完整。
+- 请求体大小上限 `50MB`（其余接口是 `2MB`），足够容纳多辆车、每辆车一张 8MB 封面图片；对应地，`nginx/reverse-proxy.conf` 的 `client_max_body_size` 也放宽到了 `50m`。
+
+成功响应：
+
+```json
+{ "importedVehicles": 2, "importedMaintenance": 3, "importedFuel": 12, "importedImages": 1 }
+```
 
 ## 统计 `/api/stats`
 
