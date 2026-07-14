@@ -1,6 +1,6 @@
 #!/bin/sh
-# 从备份文件恢复数据库。用法：
-#   docker compose run --rm -v $(pwd)/scripts:/scripts backup /scripts/restore.sh /backups/backup_xxx.sql.gz
+# 从备份文件恢复数据库（脚本已经打进 backup 镜像里了，不需要额外挂载）。用法：
+#   docker compose run --rm backup /scripts/restore.sh /backups/backup_xxx.sql.gz
 set -e
 
 FILE="$1"

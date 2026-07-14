@@ -5,7 +5,7 @@
 记录车辆保养维修与油耗的自托管应用。后端 Node.js + Express + Prisma + PostgreSQL，前端 React + Vite + Ant Design（响应式，支持桌面/移动浏览器，并可作为 PWA 添加到手机主屏幕；后续可基于同一套 REST API 开发 iOS / Android 原生 App）。
 
 - GitHub 仓库：<https://github.com/ZhangHowie/vehicle-maintenance-app>
-- Docker Hub 镜像：<https://hub.docker.com/r/howiez818/vehicle-maintenance-backend>、<https://hub.docker.com/r/howiez818/vehicle-maintenance-frontend>
+- Docker Hub 镜像：<https://hub.docker.com/r/howiez818/vehicle-maintenance-backend>、<https://hub.docker.com/r/howiez818/vehicle-maintenance-frontend>、<https://hub.docker.com/r/howiez818/vehicle-maintenance-nginx>、<https://hub.docker.com/r/howiez818/vehicle-maintenance-backup>
 
 ## 功能
 
@@ -19,43 +19,41 @@
 - 按车辆维度添加保养记录（项目、品牌、个数、价格、备注，支持多项目）
 - 按车辆维度添加油耗记录（公里数、加油量、单价、油品类型[92/95/98/柴油/电动，默认取车辆设置，可手动修改]、是否跳枪、上次是否记录、备注），并自动计算百公里油耗
 
-## 目录结构
+## 目录结构（仅在“从源码构建”时需要用到）
+
+普通部署（拉取预构建镜像）只需要 `docker-compose.yml` 和 `.env` 两个文件，不涉及下面这些源码目录。它们是仓库里的完整项目结构，供想改代码/本地构建的人参考：
 
 ```
-backend/    Node.js + Express + Prisma 后端 API
-frontend/   React + Vite + Ant Design 前端
-nginx/      反向代理配置（HTTP 默认 / HTTPS 模板）
-scripts/    数据库备份与恢复脚本
-certs/      存放 SSL 证书（自行放入）
+backend/    Node.js + Express + Prisma 后端 API 源码
+frontend/   React + Vite + Ant Design 前端源码
+nginx/      反向代理配置源码（打进 nginx 镜像）
+scripts/    数据库备份与恢复脚本源码（打进 backup 镜像）
+certs/      存放 SSL 证书（自行放入，两种部署方式都需要，仅 HTTPS 场景）
 ```
 
-## 快速开始
+## 快速开始（拉取预构建镜像，推荐）
 
-0. **获取完整项目文件**——`backend/`、`frontend/`、`nginx/`、`scripts/` 这些文件夹都是仓库里现成的，包含 Dockerfile 和源代码，**不需要也不能手动新建空文件夹**（`build:` 需要文件夹里的 Dockerfile 和源码才能构建镜像，空文件夹会报 `unable to prepare context` 之类的错误）。二选一：
+不需要 clone 整个仓库，也不需要在部署的机器上安装 Node.js / 本地编译，全部四个自定义镜像（backend / frontend / nginx / backup）都已经由 GitHub Actions 自动构建好并发布到 Docker Hub。你只需要 2 个文件：
 
-   - **git clone（推荐）**，会完整带上所有文件夹和层级：
+1. 新建一个空目录（比如 NAS 上的 `/volume1/docker/vehicle-app/`），下载这两个文件放进去：
+   - [`docker-compose.yml`](https://raw.githubusercontent.com/ZhangHowie/vehicle-maintenance-app/main/docker-compose.yml)
+   - [`.env.example`](https://raw.githubusercontent.com/ZhangHowie/vehicle-maintenance-app/main/.env.example)，下载后改名为 `.env`
 
-     ```bash
-     git clone https://github.com/ZhangHowie/vehicle-maintenance-app.git
-     ```
+2. 编辑 `.env`，把数据库密码、JWT 密钥、SMTP 邮箱等改成自己的值（必改，不要用示例里的默认值）。
 
-   - **下载 ZIP**：GitHub 仓库页面绿色 "Code" 按钮 -> "Download ZIP"。解压后会得到一个 `vehicle-maintenance-app-main` 文件夹，**把这个文件夹里面的内容**（而不是这个文件夹本身）放到你在 NAS 上准备好的项目目录里，确保 `docker-compose.yml` 跟 `backend/`、`frontend/`、`nginx/`、`scripts/` 直接平铺在同一层，中间不要多套一层目录——这是 NAS 部署时最容易踩的坑。
-
-1. 复制环境变量文件并修改（数据库密码、JWT 密钥、SMTP 邮箱等务必修改为自己的值）：
+3. 在这个目录下启动：
 
    ```bash
-   cp .env.example .env
+   docker compose up -d
    ```
 
-2. 构建并启动全部服务：
+   Docker 会自动从 Docker Hub 拉取 `howiez818/vehicle-maintenance-{backend,frontend,nginx,backup}:latest` 以及官方的 `postgres:16-alpine`，不会在本机构建任何镜像。首次拉取后会自动创建 `postgres-data`、`uploads-data`、`backup-data` 三个 Docker 数据卷用于持久化，无需手动建文件夹。
 
-   ```bash
-   docker compose up -d --build
-   ```
-
-3. 浏览器访问 `http://<服务器IP>:8082`（默认 HTTP 端口 8082，见下方启用 HTTPS 说明）。
+4. 浏览器访问 `http://<服务器IP>:8082`（默认 HTTP 端口 8082，见下方启用 HTTPS 说明）。
 
 服务包含：`postgres`（数据库）、`backend`（API）、`frontend`（静态站点）、`nginx`（反向代理，对外唯一入口，默认宿主机 8082/8083 端口，见下方说明）、`backup`（每日自动备份）。
+
+想启用 HTTPS 的话才需要额外准备 `certs/` 目录（放证书）和一份自定义 nginx 配置文件，见下方「启用 HTTPS」一节，其余场景 `certs/` 目录留空即可。
 
 ### 修改对外端口（默认 8082 / 8083）
 
@@ -68,22 +66,33 @@ HTTPS_PORT=8083
 
 改完重启 `nginx` 容器生效：`docker compose up -d nginx`。
 
-### 使用 Docker Hub 上的预构建镜像（可选）
+### 从源码本地构建（改代码 / 二次开发才需要）
 
-默认 `docker-compose.yml` 里 `backend` / `frontend` 是本地构建（`build:`），首次启动会现场编译。如果不想本地构建，也可以直接拉取 CI 自动发布到 Docker Hub 的镜像，把 `docker-compose.yml` 里对应服务的 `build:` 换成：
+如果你要修改源码或者做二次开发，需要完整 clone 仓库，再用专门的 `docker-compose.build.yml` 本地构建全部镜像（而不是拉取 Docker Hub 上的）：
 
-```yaml
-backend:
-  image: howiez818/vehicle-maintenance-backend:latest
-frontend:
-  image: howiez818/vehicle-maintenance-frontend:latest
-```
+1. **完整获取项目文件**——`backend/`、`frontend/`、`nginx/`、`scripts/` 这些文件夹都是仓库里现成的，包含 Dockerfile 和源代码，构建时**不需要也不能手动新建空文件夹**（`build:` 需要文件夹里的 Dockerfile 和源码才能构建镜像，空文件夹会报 `unable to prepare context` 之类的错误）。二选一：
 
-镜像同时提供 `linux/amd64` 和 `linux/arm64`，Intel/Apple Silicon Mac、普通 x86 服务器都能直接拉取对应架构，无需本地编译。
+   - **git clone（推荐）**，会完整带上所有文件夹和层级：
+
+     ```bash
+     git clone https://github.com/ZhangHowie/vehicle-maintenance-app.git
+     ```
+
+   - **下载 ZIP**：GitHub 仓库页面绿色 "Code" 按钮 -> "Download ZIP"。解压后会得到一个 `vehicle-maintenance-app-main` 文件夹，**把这个文件夹里面的内容**（而不是这个文件夹本身）放到你准备好的项目目录里，确保 `docker-compose.build.yml` 跟 `backend/`、`frontend/`、`nginx/`、`scripts/` 直接平铺在同一层，中间不要多套一层目录。
+
+2. 复制并修改 `.env`（同上）。
+
+3. 本地构建并启动全部服务：
+
+   ```bash
+   docker compose -f docker-compose.build.yml up -d --build
+   ```
+
+只是想部署使用、不改代码的话，不需要走这条路径，用上面「快速开始」拉取 Docker Hub 镜像即可。
 
 ## 持续集成 / 自动发布
 
-`.github/workflows/docker-publish.yml` 会在每次 push 到 `main` 分支时，自动构建 `backend` / `frontend` 镜像并推送到 Docker Hub（打 `v1.0.0` 这样的 tag 时会额外打上对应版本号）。
+`.github/workflows/docker-publish.yml` 会在每次 push 到 `main` 分支时，自动构建 `backend` / `frontend` / `nginx` / `backup` 四个镜像并推送到 Docker Hub（打 `v1.0.0` 这样的 tag 时会额外打上对应版本号）。「快速开始」里拉取镜像部署的方式依赖这四个镜像都构建成功，其中任何一个失败都会导致对应服务 `docker compose up -d` 时拉取失败。镜像同时提供 `linux/amd64` 和 `linux/arm64`，Intel/Apple Silicon Mac、普通 x86 服务器都能直接拉取对应架构。
 
 使用前需要在 GitHub 仓库的 `Settings -> Secrets and variables -> Actions` 里添加两个 repository secret：
 
@@ -111,15 +120,25 @@ frontend:
 
 ## 启用 HTTPS / 导入 SSL 证书
 
-1. 将证书文件放入 `certs/` 目录：`fullchain.pem`、`privkey.pem`（详见 `certs/README.md`）。
-2. 用 `nginx/reverse-proxy.https.conf.example` 覆盖 `nginx/reverse-proxy.conf`。
-3. 重启 Nginx 容器：
+默认拉取镜像部署时，nginx 的反向代理配置已经打进镜像（只支持 HTTP）。启用 HTTPS 需要用一份自定义配置文件覆盖掉镜像里的默认配置：
 
-   ```bash
-   docker compose restart nginx
+1. 将证书文件放入 `certs/` 目录：`fullchain.pem`、`privkey.pem`（详见 `certs/README.md`，跟 `docker-compose.yml` 同级新建 `certs/` 目录即可）。
+2. 下载 [`nginx/reverse-proxy.https.conf.example`](https://raw.githubusercontent.com/ZhangHowie/vehicle-maintenance-app/main/nginx/reverse-proxy.https.conf.example)，保存到项目目录下，改名为 `reverse-proxy.conf`（跟 `docker-compose.yml` 同级）。如果你把 `.env` 里的 `HTTPS_PORT` 改成了默认值（8083）以外的端口，记得同步修改这份文件里跳转规则上写死的端口号，文件里有对应的注释说明。
+3. 编辑 `docker-compose.yml`，找到 `nginx` 服务下 `volumes:` 里被注释掉的这一行，取消注释：
+
+   ```yaml
+   - ./reverse-proxy.conf:/etc/nginx/conf.d/default.conf:ro
    ```
 
-之后 HTTP 端口（默认 8082）会自动跳转到 HTTPS 端口（默认 8083）。如果你把 `.env` 里的 `HTTPS_PORT` 改成了默认值以外的端口，记得同步修改 `reverse-proxy.https.conf.example`（复制出来的那份 `reverse-proxy.conf`）里跳转规则上写死的端口号，否则跳转地址不对，模板文件里有对应的注释说明。
+4. 重启 Nginx 容器：
+
+   ```bash
+   docker compose up -d nginx
+   ```
+
+之后 HTTP 端口（默认 8082）会自动跳转到 HTTPS 端口（默认 8083）。
+
+（如果你走的是「从源码本地构建」路径、用的是 `docker-compose.build.yml`，这个文件里 nginx 服务默认已经挂载了 `./nginx/reverse-proxy.conf`，直接用第 2 步下载的内容替换 `nginx/reverse-proxy.conf` 文件本身即可，不需要改 compose 文件。）
 
 ## 数据导入 / 导出 / 备份
 
