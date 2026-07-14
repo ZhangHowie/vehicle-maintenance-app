@@ -43,9 +43,20 @@ certs/      存放 SSL 证书（自行放入）
    docker compose up -d --build
    ```
 
-3. 浏览器访问 `http://<服务器IP>`（默认 HTTP，见下方启用 HTTPS 说明）。
+3. 浏览器访问 `http://<服务器IP>:8082`（默认 HTTP 端口 8082，见下方启用 HTTPS 说明）。
 
-服务包含：`postgres`（数据库）、`backend`（API）、`frontend`（静态站点）、`nginx`（反向代理，对外唯一入口，80/443 端口）、`backup`（每日自动备份）。
+服务包含：`postgres`（数据库）、`backend`（API）、`frontend`（静态站点）、`nginx`（反向代理，对外唯一入口，默认宿主机 8082/8083 端口，见下方说明）、`backup`（每日自动备份）。
+
+### 修改对外端口（默认 8082 / 8083）
+
+`nginx` 默认把宿主机的 `8082`（HTTP）/ `8083`（HTTPS）映射到容器内的 80/443，这样不会跟很多 NAS（比如群晖 DSM 自己的管理界面、Web Station 等）已经占用的 80/443 冲突。如果想换成别的端口或者改回 80/443，在 `.env` 里加两行就行，不用改 `docker-compose.yml`：
+
+```bash
+HTTP_PORT=8082
+HTTPS_PORT=8083
+```
+
+改完重启 `nginx` 容器生效：`docker compose up -d nginx`。
 
 ### 使用 Docker Hub 上的预构建镜像（可选）
 
@@ -98,7 +109,7 @@ frontend:
    docker compose restart nginx
    ```
 
-之后 80 端口会自动跳转到 443（HTTPS）。
+之后 HTTP 端口（默认 8082）会自动跳转到 HTTPS 端口（默认 8083）。如果你把 `.env` 里的 `HTTPS_PORT` 改成了默认值以外的端口，记得同步修改 `reverse-proxy.https.conf.example`（复制出来的那份 `reverse-proxy.conf`）里跳转规则上写死的端口号，否则跳转地址不对，模板文件里有对应的注释说明。
 
 ## 数据导入 / 导出 / 备份
 

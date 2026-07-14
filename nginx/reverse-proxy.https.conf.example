@@ -4,6 +4,11 @@
 #      （或自行修改下方 ssl_certificate / ssl_certificate_key 路径）
 #   2. 将本文件复制为 nginx/reverse-proxy.conf（覆盖默认的 HTTP-only 配置）
 #   3. 执行 docker compose restart nginx
+#
+# 注意：下面 HTTP -> HTTPS 跳转写死了端口 8083（对应 docker-compose.yml 里
+# nginx 默认映射的 HTTPS 宿主机端口）。如果你在 .env 里把 HTTPS_PORT 改成了
+# 别的值，或者用的是标准 443 端口，记得把下面这一行的 8083 也同步改掉，
+# 否则跳转会带着错误的端口号，浏览器打不开。
 
 client_max_body_size 20m;
 
@@ -14,7 +19,7 @@ server {
         root /var/www/certbot;
     }
     location / {
-        return 301 https://$host$request_uri;
+        return 301 https://$host:8083$request_uri;
     }
 }
 
