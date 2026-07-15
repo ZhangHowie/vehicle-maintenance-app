@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Modal,
   Form,
   Input,
   InputNumber,
@@ -10,6 +9,7 @@ import {
   Space,
   Button,
   message,
+  Grid,
 } from "antd";
 import { PlusOutlined, MinusCircleOutlined, ToolOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -17,6 +17,7 @@ import { api } from "../api/client";
 import { FUEL_TYPE_OPTIONS } from "../constants";
 import { RECORD_THEME } from "../theme";
 import { SectionLabel, TotalSummary } from "./SectionLabel";
+import MobileSheet from "./MobileSheet";
 
 export type RecordType = "maintenance" | "fuel";
 
@@ -49,6 +50,7 @@ const THEME = {
 // 保养项目表格：表头和每一行共用同一套 grid 列宽定义，从根本上保证"项目/品牌/个数/单价"
 // 横向对齐，且每一行竖向也严格对齐（不再依赖 Space 组件里手动拼凑的像素宽度）。
 const ITEM_GRID = "minmax(140px,1.6fr) minmax(90px,1fr) 84px 104px 24px";
+const { useBreakpoint } = Grid;
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -68,6 +70,7 @@ export default function RecordFormModal({
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const isEdit = Boolean(recordId);
+  const isMobile = !useBreakpoint().md;
   const currentVehicle = vehicles.find((v) => v.id === vehicleId);
   const theme = THEME[type];
 
@@ -202,7 +205,7 @@ export default function RecordFormModal({
       : "添加油耗记录";
 
   return (
-    <Modal
+    <MobileSheet
       title={
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span
@@ -336,7 +339,15 @@ export default function RecordFormModal({
               )}
             </Form.List>
 
-            <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 12, alignItems: "end", marginTop: 12 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "200px 1fr",
+                gap: 12,
+                alignItems: "end",
+                marginTop: 12,
+              }}
+            >
               <Form.Item name="discountAmount" label="优惠金额（元）" initialValue={0} style={{ marginBottom: 0 }}>
                 <InputNumber min={0} style={{ width: "100%" }} placeholder="0" />
               </Form.Item>
@@ -423,6 +434,6 @@ export default function RecordFormModal({
           </Button>
         </Space>
       </Form>
-    </Modal>
+    </MobileSheet>
   );
 }

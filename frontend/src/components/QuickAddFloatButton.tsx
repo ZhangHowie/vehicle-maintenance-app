@@ -1,41 +1,21 @@
-import React, { useEffect, useState } from "react";
-import { FloatButton, Grid } from "antd";
+import React from "react";
+import { FloatButton } from "antd";
 import { PlusOutlined, ToolOutlined, ThunderboltOutlined } from "@ant-design/icons";
-import { useMatch } from "react-router-dom";
-import { api } from "../api/client";
-import RecordFormModal, { RecordType, VehicleOption } from "./RecordFormModal";
-import { notifyRecordsUpdated } from "../events";
+import RecordFormModal from "./RecordFormModal";
 import { RECORD_THEME } from "../theme";
+import { useQuickAddRecord } from "../hooks/useQuickAddRecord";
 
-const { useBreakpoint } = Grid;
-
-// 全局悬浮添加按钮：任意页面都能快速添加一条保养或油耗记录，默认关联当前车辆（若在车辆详情页）
-// 或最近的一辆车，也可以在弹窗里手动切换车辆。
+// 桌面端悬浮添加按钮：任意页面都能快速添加一条保养或油耗记录，默认关联当前车辆
+// （若在车辆详情页）或最近的一辆车，也可以在弹窗里手动切换车辆。
+// 移动端的等价入口并入了 Layout.tsx 底部导航栏的凸起按钮，不再用这个悬浮版本。
 export default function QuickAddFloatButton() {
-  const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
-  const [modalType, setModalType] = useState<RecordType | null>(null);
-  const [vehicleId, setVehicleId] = useState<string>("");
-  const vehicleMatch = useMatch("/vehicles/:id");
-  const screens = useBreakpoint();
-  // 移动端底部有固定的导航栏（见 Layout.tsx），悬浮按钮要往上挪，否则会被导航栏
-  // 挡住一部分甚至完全重叠。
-  const bottomOffset = screens.md ? 24 : "calc(76px + env(safe-area-inset-bottom))";
-
-  useEffect(() => {
-    api.get("/vehicles").then((res) => setVehicles(res.data));
-  }, [modalType]);
-
-  function openModal(type: RecordType) {
-    const defaultId = vehicleMatch?.params.id ?? vehicles[0]?.id ?? "";
-    setVehicleId(defaultId);
-    setModalType(type);
-  }
+  const { vehicles, modalType, vehicleId, setVehicleId, openModal, closeModal, onSuccess } = useQuickAddRecord();
 
   if (vehicles.length === 0) return null;
 
   return (
     <>
-      <FloatButton.Group trigger="click" type="primary" style={{ right: 24, bottom: bottomOffset }} icon={<PlusOutlined />}>
+      <FloatButton.Group trigger="click" type="primary" style={{ right: 24, bottom: 24 }} icon={<PlusOutlined />}>
         <FloatButton
           icon={<ToolOutlined style={{ color: RECORD_THEME.maintenance.color }} />}
           tooltip="添加保养记录"
@@ -55,8 +35,8 @@ export default function QuickAddFloatButton() {
           vehicles={vehicles}
           vehicleId={vehicleId}
           onVehicleChange={setVehicleId}
-          onClose={() => setModalType(null)}
-          onSuccess={() => notifyRecordsUpdated()}
+          onClose={closeModal}
+          onSuccess={onSuccess}
         />
       )}
     </>

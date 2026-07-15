@@ -16,3 +16,44 @@ body {
     display: none !important;
   }
 }
+
+/* MobileSheet 组件用：把普通居中 Modal 改成贴底部的全宽抽屉。
+   直接用 fixed 定位覆盖 antd 默认的居中/margin 逻辑，不依赖 wrap 的 flex 对齐，
+   避免和 antd 内部定位方式打架。 */
+.mobile-sheet-wrap .ant-modal {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: auto;
+  margin: 0;
+  width: 100% !important;
+  max-width: 100vw;
+  padding-bottom: 0;
+}
+
+.mobile-sheet-wrap .ant-modal-content {
+  border-radius: 16px 16px 0 0;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+}
+
+.mobile-sheet-wrap .ant-modal-header {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+  padding: 0;
+  background: transparent;
+}
+
+.mobile-sheet-wrap .ant-modal-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.mobile-sheet-wrap .ant-modal-footer {
+  flex-shrink: 0;
+  margin-top: 12px;
+}

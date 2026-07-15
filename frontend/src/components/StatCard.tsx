@@ -43,7 +43,7 @@ export function StatCard({
         value={value}
         precision={precision}
         prefix={prefix}
-        valueStyle={{ color, fontSize: 18, fontWeight: 600 }}
+        valueStyle={{ color, fontSize: 18, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}
       />
     </Card>
   );

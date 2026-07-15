@@ -14,3 +14,11 @@ export const RECORD_THEME = {
   maintenance: { color: "#c2620d", tint: "#fdf3e7" },
   fuel: { color: "#0d8a86", tint: "#e7f6f5" },
 };
+
+// 页面外壳用的中性色：页面背景 / 卡片背景 / 分隔线，统一从这里取，
+// 避免 Layout、导航栏这类外壳组件里到处写 #fff / #eee 字面量。
+export const SURFACE = {
+  page: "#f5f6f8",
+  card: "#ffffff",
+  border: "rgba(0,0,0,0.08)",
+};

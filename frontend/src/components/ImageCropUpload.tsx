@@ -164,7 +164,7 @@ export default function ImageCropUpload({ onCropped }: Props) {
         cancelText="取消"
         maskClosable={!processing}
         closable={!processing}
-        width={420}
+        width="min(92vw, 420px)"
       >
         <div style={{ position: "relative", width: "100%", height: 320, background: "#333" }}>
           {imageSrc ? (

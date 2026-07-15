@@ -11,7 +11,6 @@ import {
   Tag,
   Empty,
   Segmented,
-  Modal,
   Descriptions,
   Select,
 } from "antd";
@@ -30,6 +29,7 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, LineChart, L
 import { api } from "../api/client";
 import { fuelTypeLabel } from "../constants";
 import RecordFormModal, { RecordType } from "../components/RecordFormModal";
+import MobileSheet from "../components/MobileSheet";
 import { StatCard } from "../components/StatCard";
 import { notifyRecordsUpdated } from "../events";
 import { BRAND, RECORD_THEME } from "../theme";
@@ -583,7 +583,7 @@ export default function VehicleDetail() {
       )}
 
       {detailRecord && (
-        <Modal
+        <MobileSheet
           open={Boolean(detailRecord)}
           onCancel={() => setDetailRecord(null)}
           width={520}
@@ -704,7 +704,7 @@ export default function VehicleDetail() {
               </Descriptions.Item>
             </Descriptions>
           )}
-        </Modal>
+        </MobileSheet>
       )}
     </div>
   );
