@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Card, Row, Col, Statistic, Empty, Spin, Segmented } from "antd";
+import { Card, Row, Col, Empty, Spin, Segmented } from "antd";
 import { CarOutlined, ToolOutlined, ThunderboltOutlined, DollarOutlined } from "@ant-design/icons";
 import {
   ResponsiveContainer,
@@ -17,6 +17,7 @@ import {
 import { api } from "../api/client";
 import { onRecordsUpdated } from "../events";
 import { BRAND, RECORD_THEME } from "../theme";
+import { StatCard } from "./StatCard";
 
 const COLORS = [BRAND.primary, "#52c41a", "#faad14", "#f5222d", "#722ed1", "#13c2c2", "#eb2f96", "#a0d911"];
 const CURRENT_YEAR = new Date().getFullYear();
@@ -71,52 +72,46 @@ export default function Dashboard() {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <Segmented options={yearOptions} value={year} onChange={(v) => setYear(v as number | typeof ALL_YEARS)} />
+      {/* 年份选择器外面套一层可横向滚动的容器：右对齐（flex-end）的 Segmented 在选项
+          较多、屏幕较窄时会整体超出容器往左边溢出，最左边的按钮被裁掉一部分看不全，
+          加了 overflowX 之后超出部分变成可以滑动查看，而不是直接被裁切。 */}
+      <div style={{ overflowX: "auto", marginBottom: 12, paddingBottom: 2 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", minWidth: "fit-content" }}>
+          <Segmented
+            options={yearOptions}
+            value={year}
+            onChange={(v) => setYear(v as number | typeof ALL_YEARS)}
+            style={{ flexShrink: 0 }}
+          />
+        </div>
       </div>
-      <Row gutter={[16, 16]}>
+      {/* align="stretch" 让同一行里的卡片高度保持一致：默认情况下 Row 的每个 Col
+          只按自己内容的高度撑开，标题文字长短不一时（比如"加油总支出"跟"总支出"）
+          会导致卡片底边对不齐，stretch 之后统一按这一行里最高的卡片对齐。 */}
+      <Row gutter={[12, 12]} align="stretch">
         <Col xs={12} sm={6}>
-          <Card style={{ borderTop: `3px solid ${BRAND.primary}`, borderRadius: 10 }}>
-            <Statistic
-              title="车辆数"
-              value={stats.totalVehicles}
-              prefix={<CarOutlined />}
-              valueStyle={{ color: BRAND.primary }}
-            />
-          </Card>
+          <StatCard title="车辆数" value={stats.totalVehicles} prefix={<CarOutlined />} color={BRAND.primary} />
         </Col>
         <Col xs={12} sm={6}>
-          <Card style={{ borderTop: `3px solid ${RECORD_THEME.maintenance.color}`, borderRadius: 10 }}>
-            <Statistic
-              title="保养总支出"
-              value={stats.totalMaintenanceCost}
-              precision={2}
-              prefix={<ToolOutlined />}
-              valueStyle={{ color: RECORD_THEME.maintenance.color }}
-            />
-          </Card>
+          <StatCard
+            title="保养总支出"
+            value={stats.totalMaintenanceCost}
+            precision={2}
+            prefix={<ToolOutlined />}
+            color={RECORD_THEME.maintenance.color}
+          />
         </Col>
         <Col xs={12} sm={6}>
-          <Card style={{ borderTop: `3px solid ${RECORD_THEME.fuel.color}`, borderRadius: 10 }}>
-            <Statistic
-              title="加油总支出"
-              value={stats.totalFuelCost}
-              precision={2}
-              prefix={<ThunderboltOutlined />}
-              valueStyle={{ color: RECORD_THEME.fuel.color }}
-            />
-          </Card>
+          <StatCard
+            title="加油总支出"
+            value={stats.totalFuelCost}
+            precision={2}
+            prefix={<ThunderboltOutlined />}
+            color={RECORD_THEME.fuel.color}
+          />
         </Col>
         <Col xs={12} sm={6}>
-          <Card style={{ borderTop: `3px solid ${BRAND.primary}`, borderRadius: 10 }}>
-            <Statistic
-              title="总支出"
-              value={stats.totalCost}
-              precision={2}
-              valueStyle={{ color: BRAND.primary }}
-              prefix={<DollarOutlined />}
-            />
-          </Card>
+          <StatCard title="总支出" value={stats.totalCost} precision={2} prefix={<DollarOutlined />} color={BRAND.primary} />
         </Col>
       </Row>
 

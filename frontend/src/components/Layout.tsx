@@ -92,11 +92,29 @@ export default function Layout() {
             </Button>
           </div>
         </Header>
-        <Content style={{ padding: 20, background: "#f5f6f8" }}>
+        {/* 移动端底部导航栏固定在视口底部（而不是像之前那样紧跟在页面内容后面），
+            之前"首页"入口在内容最下面，进详情页之后要滚动很久才能找到，现在
+            任何时候都能一眼看到、一点就到。paddingBottom 给 Content 留出被这条
+            固定栏挡住的空间，避免内容最后一部分被盖住点不到。 */}
+        <Content style={{ padding: 20, paddingBottom: isMobile ? 76 : 20, background: "#f5f6f8" }}>
           <Outlet />
         </Content>
         {isMobile && (
-          <Menu mode="horizontal" selectedKeys={[location.pathname]} items={menuItems} style={{ justifyContent: "center" }} />
+          <div
+            style={{
+              position: "fixed",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 20,
+              background: "#fff",
+              borderTop: "1px solid #eee",
+              boxShadow: "0 -2px 8px rgba(0,0,0,0.06)",
+              paddingBottom: "env(safe-area-inset-bottom)",
+            }}
+          >
+            <Menu mode="horizontal" selectedKeys={[location.pathname]} items={menuItems} style={{ justifyContent: "center" }} />
+          </div>
         )}
       </AntLayout>
       <QuickAddFloatButton />

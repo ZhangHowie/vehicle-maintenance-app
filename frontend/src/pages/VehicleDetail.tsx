@@ -1,13 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Card,
-  Tabs,
   Table,
   Button,
   Space,
   Popconfirm,
   message,
-  Statistic,
   Row,
   Col,
   Tag,
@@ -15,26 +13,24 @@ import {
   Segmented,
   Modal,
   Descriptions,
+  Select,
 } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, ToolOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  ToolOutlined,
+  ThunderboltOutlined,
+  ArrowLeftOutlined,
+  SwapOutlined,
+} from "@ant-design/icons";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import dayjs from "dayjs";
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-} from "recharts";
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 import { api } from "../api/client";
 import { fuelTypeLabel } from "../constants";
 import RecordFormModal, { RecordType } from "../components/RecordFormModal";
+import { StatCard } from "../components/StatCard";
 import { notifyRecordsUpdated } from "../events";
 import { BRAND, RECORD_THEME } from "../theme";
 
@@ -43,9 +39,8 @@ const ALL_YEARS = "all" as const;
 type YearFilter = number | typeof ALL_YEARS;
 type ExpenseFilter = "all" | "maintenance" | "fuel";
 
-// 分组标题用的小图标气泡，跟 Tab 页签保持同一套配色（保养=暖橙，油耗=青蓝），
-// 这样详情页的记录表格和"添加记录"弹窗在视觉上是同一套语言。
-function TabLabel({ icon, color, children }: { icon: React.ReactNode; color: string; children: React.ReactNode }) {
+// 保养/油耗切换按钮上图标+文字的小标签，颜色跟随各自的主题色（保养=暖橙，油耗=青蓝）
+function SwitchLabel({ icon, color, children }: { icon: React.ReactNode; color: string; children: React.ReactNode }) {
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
       <span style={{ color, display: "flex", alignItems: "center" }}>{icon}</span>
@@ -62,6 +57,9 @@ export default function VehicleDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [vehicle, setVehicle] = useState<any>(null);
+  // 顶部"切换车辆"下拉的选项，只在移动端进入详情页后没法方便地返回列表页/切换到
+  // 别的车辆时用得上——桌面端有侧边栏一直在，用不上也不影响。
+  const [allVehicles, setAllVehicles] = useState<{ id: string; name: string }[]>([]);
   const [maintenanceRecords, setMaintenanceRecords] = useState<any[]>([]);
   const [fuelRecords, setFuelRecords] = useState<any[]>([]);
   const [stats, setStats] = useState<{
@@ -84,6 +82,9 @@ export default function VehicleDetail() {
   const [year, setYear] = useState<YearFilter>(CURRENT_YEAR);
   // 月支出趋势图的类型筛选：全部 / 只看保养 / 只看加油
   const [expenseFilter, setExpenseFilter] = useState<ExpenseFilter>("all");
+  // 下方记录列表：保养 / 油耗 二选一切换显示，而不是两个表格堆在一起，
+  // 减少移动端要滚动的长度。
+  const [recordView, setRecordView] = useState<RecordType>("maintenance");
 
   function loadAll() {
     api.get(`/vehicles/${id}`).then((res) => setVehicle(res.data));
@@ -96,6 +97,10 @@ export default function VehicleDetail() {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    api.get("/vehicles").then((res) => setAllVehicles(res.data));
+  }, []);
 
   async function deleteVehicle() {
     await api.delete(`/vehicles/${id}`);
@@ -243,6 +248,36 @@ export default function VehicleDetail() {
 
   return (
     <div>
+      {/* 返回首页 + 切换车辆：吸顶显示，移动端点进详情页之后不用滚到页面最底部去找
+          导航菜单，也不用先退回列表页才能看别的车。 */}
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 5,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 14,
+          padding: "6px 0",
+          background: "#f5f6f8",
+        }}
+      >
+        <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate("/")}>
+          返回
+        </Button>
+        {allVehicles.length > 1 && (
+          <Select
+            value={id}
+            onChange={(v) => navigate(`/vehicles/${v}`)}
+            style={{ minWidth: 130, maxWidth: 200 }}
+            suffixIcon={<SwapOutlined />}
+            options={allVehicles.map((v) => ({ value: v.id, label: v.name }))}
+          />
+        )}
+      </div>
+
       {vehicle.coverImageUrl && (
         <div
           style={{
@@ -263,16 +298,12 @@ export default function VehicleDetail() {
         </div>
       )}
 
-      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-        <Col>
+      {/* 名称/编辑删除跟标签分成两行，中间显式给了 marginTop，而不是依赖 Row 在
+          窄屏换行时自动产生的间距——那种间距是 0，换行后标签紧贴在编辑/删除按钮
+          下面，看起来快要重叠在一起。 */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <h2 style={{ margin: 0 }}>{vehicle.name}</h2>
-          <Space>
-            <Tag>{[vehicle.brand, vehicle.model].filter(Boolean).join(" ") || "-"}</Tag>
-            <Tag>{vehicle.plateNo}</Tag>
-            <Tag color={RECORD_THEME.fuel.color}>{fuelTypeLabel(vehicle.defaultFuelType)}</Tag>
-          </Space>
-        </Col>
-        <Col>
           <Space>
             <Link to={`/vehicles/${id}/edit`}>
               <Button icon={<EditOutlined />}>编辑</Button>
@@ -283,100 +314,82 @@ export default function VehicleDetail() {
               </Button>
             </Popconfirm>
           </Space>
-        </Col>
-      </Row>
-
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <Segmented options={yearOptions} value={year} onChange={(v) => setYear(v as YearFilter)} />
+        </div>
+        <Space wrap style={{ marginTop: 10 }}>
+          <Tag>{[vehicle.brand, vehicle.model].filter(Boolean).join(" ") || "-"}</Tag>
+          <Tag>{vehicle.plateNo}</Tag>
+          <Tag color={RECORD_THEME.fuel.color}>{fuelTypeLabel(vehicle.defaultFuelType)}</Tag>
+        </Space>
       </div>
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+      {/* 同 Dashboard：右对齐的 Segmented 选项多时会往左溢出屏幕，套一层横向滚动容器 */}
+      <div style={{ overflowX: "auto", marginBottom: 12, paddingBottom: 2 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", minWidth: "fit-content" }}>
+          <Segmented options={yearOptions} value={year} onChange={(v) => setYear(v as YearFilter)} style={{ flexShrink: 0 }} />
+        </div>
+      </div>
+
+      <Row gutter={[12, 12]} style={{ marginBottom: 16 }} align="stretch">
         <Col xs={12} sm={8}>
-          <Card style={{ borderTop: `3px solid ${BRAND.primary}`, borderRadius: 10 }}>
-            <Statistic
-              title={`总消费金额${year === ALL_YEARS ? "" : `（${year}）`}`}
-              value={periodStats.totalCost}
-              precision={2}
-              prefix="¥"
-              valueStyle={{ color: BRAND.primary }}
-            />
-          </Card>
+          <StatCard
+            title={`总消费金额${year === ALL_YEARS ? "" : `（${year}）`}`}
+            value={periodStats.totalCost}
+            precision={2}
+            prefix="¥"
+            color={BRAND.primary}
+          />
         </Col>
         <Col xs={12} sm={8}>
-          <Card style={{ borderTop: `3px solid ${RECORD_THEME.maintenance.color}`, borderRadius: 10 }}>
-            <Statistic
-              title={`总保养金额${year === ALL_YEARS ? "" : `（${year}）`}`}
-              value={periodStats.totalMaintenanceCost}
-              precision={2}
-              prefix="¥"
-              valueStyle={{ color: RECORD_THEME.maintenance.color }}
-            />
-          </Card>
+          <StatCard
+            title={`总保养金额${year === ALL_YEARS ? "" : `（${year}）`}`}
+            value={periodStats.totalMaintenanceCost}
+            precision={2}
+            prefix="¥"
+            color={RECORD_THEME.maintenance.color}
+          />
         </Col>
         <Col xs={12} sm={8}>
-          <Card style={{ borderTop: `3px solid ${RECORD_THEME.fuel.color}`, borderRadius: 10 }}>
-            <Statistic
-              title={`总加油金额${year === ALL_YEARS ? "" : `（${year}）`}`}
-              value={periodStats.totalFuelCost}
-              precision={2}
-              prefix="¥"
-              valueStyle={{ color: RECORD_THEME.fuel.color }}
-            />
-          </Card>
+          <StatCard
+            title={`总加油金额${year === ALL_YEARS ? "" : `（${year}）`}`}
+            value={periodStats.totalFuelCost}
+            precision={2}
+            prefix="¥"
+            color={RECORD_THEME.fuel.color}
+          />
         </Col>
         <Col xs={12} sm={8}>
-          <Card style={{ borderTop: `3px solid ${RECORD_THEME.fuel.color}`, borderRadius: 10 }}>
-            <Statistic
-              title="最近百公里油耗 (L)"
-              value={stats.recentLitersPer100km ?? "暂无数据"}
-              valueStyle={{ color: RECORD_THEME.fuel.color }}
-            />
-          </Card>
+          <StatCard
+            title="最近百公里油耗 (L)"
+            value={stats.recentLitersPer100km ?? "暂无数据"}
+            color={RECORD_THEME.fuel.color}
+          />
         </Col>
         <Col xs={12} sm={8}>
-          <Card style={{ borderTop: `3px solid ${RECORD_THEME.fuel.color}`, borderRadius: 10 }}>
-            <Statistic
-              title="平均百公里油耗 (L)"
-              value={stats.averageLitersPer100km ?? "暂无数据"}
-              valueStyle={{ color: RECORD_THEME.fuel.color }}
-            />
-          </Card>
+          <StatCard
+            title="平均百公里油耗 (L)"
+            value={stats.averageLitersPer100km ?? "暂无数据"}
+            color={RECORD_THEME.fuel.color}
+          />
         </Col>
         <Col xs={12} sm={8}>
-          <Card style={{ borderTop: `3px solid ${RECORD_THEME.fuel.color}`, borderRadius: 10 }}>
-            <Statistic
-              title={`平均油费 (元/km)${year === ALL_YEARS ? "" : `（${year}）`}`}
-              value={periodStats.avgFuelCostPerKm ?? "暂无数据"}
-              valueStyle={{ color: RECORD_THEME.fuel.color }}
-            />
-          </Card>
+          <StatCard
+            title={`平均油费 (元/km)${year === ALL_YEARS ? "" : `（${year}）`}`}
+            value={periodStats.avgFuelCostPerKm ?? "暂无数据"}
+            color={RECORD_THEME.fuel.color}
+          />
         </Col>
         <Col xs={12} sm={8}>
-          <Card style={{ borderTop: `3px solid ${BRAND.primary}`, borderRadius: 10 }}>
-            <Statistic
-              title={`平均行驶 (km/天)${year === ALL_YEARS ? "" : `（${year}）`}`}
-              value={periodStats.avgDistancePerDay ?? "暂无数据"}
-              valueStyle={{ color: BRAND.primary }}
-            />
-          </Card>
+          <StatCard
+            title={`平均行驶 (km/天)${year === ALL_YEARS ? "" : `（${year}）`}`}
+            value={periodStats.avgDistancePerDay ?? "暂无数据"}
+            color={BRAND.primary}
+          />
         </Col>
         <Col xs={12} sm={8}>
-          <Card style={{ borderTop: `3px solid ${RECORD_THEME.maintenance.color}`, borderRadius: 10 }}>
-            <Statistic
-              title="保养记录数"
-              value={filteredMaintenance.length}
-              valueStyle={{ color: RECORD_THEME.maintenance.color }}
-            />
-          </Card>
+          <StatCard title="保养记录数" value={filteredMaintenance.length} color={RECORD_THEME.maintenance.color} />
         </Col>
         <Col xs={12} sm={8}>
-          <Card style={{ borderTop: `3px solid ${RECORD_THEME.fuel.color}`, borderRadius: 10 }}>
-            <Statistic
-              title="油耗记录数"
-              value={filteredFuel.length}
-              valueStyle={{ color: RECORD_THEME.fuel.color }}
-            />
-          </Card>
+          <StatCard title="油耗记录数" value={filteredFuel.length} color={RECORD_THEME.fuel.color} />
         </Col>
       </Row>
 
@@ -461,124 +474,100 @@ export default function VehicleDetail() {
         </Col>
       </Row>
 
-      <Tabs
-        items={[
-          {
-            key: "maintenance",
-            label: (
-              <TabLabel icon={<ToolOutlined />} color={RECORD_THEME.maintenance.color}>
-                保养记录
-              </TabLabel>
-            ),
-            children: (
-              <>
-                <div style={{ textAlign: "right", marginBottom: 12 }}>
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => setModalState({ type: "maintenance" })}
-                    style={{ background: RECORD_THEME.maintenance.color, borderColor: RECORD_THEME.maintenance.color }}
-                  >
-                    添加保养记录
-                  </Button>
-                </div>
-                <Table
-                  rowKey="id"
-                  dataSource={filteredMaintenance}
-                  scroll={{ x: true }}
-                  onRow={(r) => ({
-                    onClick: () => setDetailRecord({ type: "maintenance", record: r }),
-                    style: { cursor: "pointer" },
-                  })}
-                  columns={[
-                    { title: "日期", dataIndex: "date", render: (v) => dayjs(v).format("YYYY-MM-DD") },
-                    { title: "里程(km)", dataIndex: "mileage" },
-                    {
-                      title: "项目",
-                      dataIndex: "items",
-                      render: (items: any[]) => items.map((i) => i.project).join("、"),
-                    },
-                    {
-                      title: "优惠",
-                      dataIndex: "discountAmount",
-                      render: (v: number) => (Number(v) > 0 ? `-¥${Number(v).toFixed(2)}` : "-"),
-                    },
-                    { title: "总价", dataIndex: "totalPrice", render: (v: number) => `¥${Number(v).toFixed(2)}` },
-                    { title: "备注", dataIndex: "remark" },
-                    {
-                      title: "操作",
-                      render: (_: any, r: any) => (
-                        <Space onClick={(e) => e.stopPropagation()}>
-                          <a onClick={() => setModalState({ type: "maintenance", recordId: r.id, initialValues: r })}>
-                            编辑
-                          </a>
-                          <Popconfirm title="确认删除？" onConfirm={() => deleteMaintenance(r.id)}>
-                            <a>删除</a>
-                          </Popconfirm>
-                        </Space>
-                      ),
-                    },
-                  ]}
-                />
-              </>
-            ),
-          },
-          {
-            key: "fuel",
-            label: (
-              <TabLabel icon={<ThunderboltOutlined />} color={RECORD_THEME.fuel.color}>
-                油耗记录
-              </TabLabel>
-            ),
-            children: (
-              <>
-                <div style={{ textAlign: "right", marginBottom: 12 }}>
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => setModalState({ type: "fuel" })}
-                    style={{ background: RECORD_THEME.fuel.color, borderColor: RECORD_THEME.fuel.color }}
-                  >
-                    添加油耗记录
-                  </Button>
-                </div>
-                <Table
-                  rowKey="id"
-                  dataSource={filteredFuel}
-                  scroll={{ x: true }}
-                  onRow={(r) => ({
-                    onClick: () => setDetailRecord({ type: "fuel", record: r }),
-                    style: { cursor: "pointer" },
-                  })}
-                  columns={[
-                    { title: "日期", dataIndex: "date", render: (v) => dayjs(v).format("YYYY-MM-DD") },
-                    { title: "里程(km)", dataIndex: "mileage" },
-                    {
-                      title: "百公里油耗(L)",
-                      dataIndex: "mileage",
-                      render: (mileage: number) => {
-                        const v = fuelEfficiencyByMileage.get(mileage);
-                        return v !== undefined ? v : "-";
-                      },
-                    },
-                    {
-                      title: "操作",
-                      render: (_: any, r: any) => (
-                        <Space onClick={(e) => e.stopPropagation()}>
-                          <a onClick={() => setModalState({ type: "fuel", recordId: r.id, initialValues: r })}>编辑</a>
-                          <Popconfirm title="确认删除？" onConfirm={() => deleteFuel(r.id)}>
-                            <a>删除</a>
-                          </Popconfirm>
-                        </Space>
-                      ),
-                    },
-                  ]}
-                />
-              </>
-            ),
-          },
-        ]}
-      />
+      {/* 保养/油耗两个列表改成按钮切换、每次只显示一个，而不是两个表格堆在同一屏——
+          详情页本来卡片+图表就已经很长了，两份表格再摞在一起，移动端要滚很久才能
+          看到想要的记录。列表本身也只保留最关键的几列，优惠/备注/编辑/删除都不在
+          列表里显示了，点开某一行的详情弹窗（下面 Modal）能看到完整信息，也能在
+          那里编辑或删除。 */}
+      <Card style={{ borderRadius: 10 }} styles={{ body: { padding: "12px 12px 4px" } }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 8,
+            marginBottom: 12,
+          }}
+        >
+          <Segmented
+            value={recordView}
+            onChange={(v) => setRecordView(v as RecordType)}
+            options={[
+              {
+                value: "maintenance",
+                label: (
+                  <SwitchLabel icon={<ToolOutlined />} color={RECORD_THEME.maintenance.color}>
+                    保养记录
+                  </SwitchLabel>
+                ),
+              },
+              {
+                value: "fuel",
+                label: (
+                  <SwitchLabel icon={<ThunderboltOutlined />} color={RECORD_THEME.fuel.color}>
+                    油耗记录
+                  </SwitchLabel>
+                ),
+              },
+            ]}
+          />
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setModalState({ type: recordView })}
+            style={{ background: RECORD_THEME[recordView].color, borderColor: RECORD_THEME[recordView].color }}
+          >
+            添加{recordView === "maintenance" ? "保养" : "油耗"}记录
+          </Button>
+        </div>
+
+        {recordView === "maintenance" ? (
+          <Table
+            rowKey="id"
+            dataSource={filteredMaintenance}
+            scroll={{ x: true }}
+            pagination={{ pageSize: 10, hideOnSinglePage: true }}
+            onRow={(r) => ({
+              onClick: () => setDetailRecord({ type: "maintenance", record: r }),
+              style: { cursor: "pointer" },
+            })}
+            columns={[
+              { title: "日期", dataIndex: "date", render: (v) => dayjs(v).format("YYYY-MM-DD") },
+              { title: "里程(km)", dataIndex: "mileage" },
+              {
+                title: "项目",
+                dataIndex: "items",
+                render: (items: any[]) => items.map((i) => i.project).join("、"),
+              },
+              { title: "总价", dataIndex: "totalPrice", render: (v: number) => `¥${Number(v).toFixed(2)}` },
+            ]}
+          />
+        ) : (
+          <Table
+            rowKey="id"
+            dataSource={filteredFuel}
+            scroll={{ x: true }}
+            pagination={{ pageSize: 10, hideOnSinglePage: true }}
+            onRow={(r) => ({
+              onClick: () => setDetailRecord({ type: "fuel", record: r }),
+              style: { cursor: "pointer" },
+            })}
+            columns={[
+              { title: "日期", dataIndex: "date", render: (v) => dayjs(v).format("YYYY-MM-DD") },
+              { title: "里程(km)", dataIndex: "mileage" },
+              {
+                title: "百公里油耗(L)",
+                dataIndex: "mileage",
+                render: (mileage: number) => {
+                  const v = fuelEfficiencyByMileage.get(mileage);
+                  return v !== undefined ? v : "-";
+                },
+              },
+            ]}
+          />
+        )}
+      </Card>
 
       {modalState && vehicle && (
         <RecordFormModal
@@ -619,6 +608,20 @@ export default function VehicleDetail() {
             </span>
           }
           footer={[
+            // 编辑/删除都收进了详情弹窗里，列表行本身不再放操作按钮
+            <Popconfirm
+              key="delete"
+              title="确认删除该条记录？"
+              onConfirm={async () => {
+                if (detailRecord.type === "maintenance") await deleteMaintenance(detailRecord.record.id);
+                else await deleteFuel(detailRecord.record.id);
+                setDetailRecord(null);
+              }}
+            >
+              <Button danger icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>,
             <Button key="close" onClick={() => setDetailRecord(null)}>
               关闭
             </Button>,
