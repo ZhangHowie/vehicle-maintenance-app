@@ -19,7 +19,9 @@ enum FuelType {
 
 model User {
   id                 String    @id @default(uuid())
-  email              String    @unique
+  // 登录用账号名，取代原来"用邮箱登录"的方式；email 改为可选，仅用于找回密码邮件
+  username           String    @unique
+  email              String?   @unique
   passwordHash       String
   totpSecret         String?
   totpEnabled        Boolean   @default(false)
@@ -39,15 +41,16 @@ model User {
 // 登录尝试记录，用于暴力破解检测与审计
 model LoginAttempt {
   id        String   @id @default(uuid())
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  email     String
-  ip        String
-  success   Boolean
-  createdAt DateTime @default(now())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // 登录时实际输入的账号名（现在是 username，历史数据里可能是邮箱），仅用于审计展示
+  identifier String
+  ip         String
+  success    Boolean
+  createdAt  DateTime @default(now())
 
   @@index([ip, createdAt])
-  @@index([email, createdAt])
+  @@index([identifier, createdAt])
 }
 
 // IP 黑名单，命中后直接拒绝请求
@@ -77,6 +80,7 @@ model Vehicle {
 
   maintenanceRecords MaintenanceRecord[]
   fuelRecords        FuelRecord[]
+  expenseRecords     ExpenseRecord[]
 
   @@index([userId])
 }
@@ -130,6 +134,22 @@ model FuelRecord {
   remark       String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([vehicleId, date])
+}
+
+// 其他消费记录：在这辆车上花费的、不属于保养/加油的杂项支出，如停车费、行车记录仪、脚垫等
+model ExpenseRecord {
+  id        String   @id @default(uuid())
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  date      DateTime
+  // 消费项目名称，如"停车费"“行车记录仪”
+  item      String
+  amount    Decimal  @db.Decimal(10, 2)
+  remark    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([vehicleId, date])
 }

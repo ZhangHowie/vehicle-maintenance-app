@@ -11,7 +11,7 @@ import {
   message,
   Grid,
 } from "antd";
-import { PlusOutlined, MinusCircleOutlined, ToolOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { PlusOutlined, MinusCircleOutlined, ToolOutlined, ThunderboltOutlined, ShoppingOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { api } from "../api/client";
 import { FUEL_TYPE_OPTIONS } from "../constants";
@@ -19,7 +19,7 @@ import { RECORD_THEME } from "../theme";
 import { SectionLabel, TotalSummary } from "./SectionLabel";
 import MobileSheet from "./MobileSheet";
 
-export type RecordType = "maintenance" | "fuel";
+export type RecordType = "maintenance" | "fuel" | "expense";
 
 export interface VehicleOption {
   id: string;
@@ -45,6 +45,7 @@ interface Props {
 const THEME = {
   maintenance: { ...RECORD_THEME.maintenance, icon: <ToolOutlined /> },
   fuel: { ...RECORD_THEME.fuel, icon: <ThunderboltOutlined /> },
+  expense: { ...RECORD_THEME.expense, icon: <ShoppingOutlined /> },
 };
 
 // 保养项目表格：表头和每一行共用同一套 grid 列宽定义，从根本上保证"项目/品牌/个数/单价"
@@ -108,7 +109,7 @@ export default function RecordFormModal({
     } else if (type === "maintenance") {
       form.resetFields();
       form.setFieldsValue({ date: dayjs(), discountAmount: 0, items: [{ project: "", quantity: 1, price: 0 }] });
-    } else {
+    } else if (type === "fuel") {
       form.resetFields();
       form.setFieldsValue({
         date: dayjs(),
@@ -116,6 +117,9 @@ export default function RecordFormModal({
         isFullTank: true,
         lastRecorded: true,
       });
+    } else {
+      form.resetFields();
+      form.setFieldsValue({ date: dayjs() });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, recordId, type, vehicleId]);
@@ -172,13 +176,16 @@ export default function RecordFormModal({
       return;
     }
     setLoading(true);
-    // amount 只是加油量/总金额互算用的辅助字段，后端不需要也不认识它，提交前去掉
+    // 加油记录里 amount 只是加油量/总金额互算用的辅助字段，后端不需要也不认识它，
+    // 提交前去掉；消费记录的 amount 是真正要提交的字段，不能一起去掉。
     const { amount, ...rest } = values;
-    const payload = { ...rest, date: values.date.toISOString() };
+    const payload = type === "fuel" ? { ...rest, date: values.date.toISOString() } : { ...values, date: values.date.toISOString() };
     const basePath =
       type === "maintenance"
         ? `/vehicles/${vehicleId}/maintenance-records`
-        : `/vehicles/${vehicleId}/fuel-records`;
+        : type === "fuel"
+        ? `/vehicles/${vehicleId}/fuel-records`
+        : `/vehicles/${vehicleId}/expense-records`;
     try {
       if (isEdit) {
         await api.put(`${basePath}/${recordId}`, payload);
@@ -195,14 +202,8 @@ export default function RecordFormModal({
     }
   }
 
-  const title =
-    type === "maintenance"
-      ? isEdit
-        ? "编辑保养记录"
-        : "添加保养记录"
-      : isEdit
-      ? "编辑油耗记录"
-      : "添加油耗记录";
+  const TITLES: Record<RecordType, string> = { maintenance: "保养记录", fuel: "油耗记录", expense: "消费记录" };
+  const title = `${isEdit ? "编辑" : "添加"}${TITLES[type]}`;
 
   return (
     <MobileSheet
@@ -364,7 +365,7 @@ export default function RecordFormModal({
               <Input.TextArea rows={2} />
             </Form.Item>
           </>
-        ) : (
+        ) : type === "fuel" ? (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Form.Item name="date" label="加油日期" rules={[{ required: true }]} style={{ marginBottom: 0 }}>
@@ -416,6 +417,34 @@ export default function RecordFormModal({
                 <Switch />
               </Form.Item>
             </div>
+            <Form.Item name="remark" label="备注">
+              <Input.TextArea rows={2} />
+            </Form.Item>
+          </>
+        ) : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Form.Item name="date" label="消费日期" rules={[{ required: true }]} style={{ marginBottom: 0 }}>
+                <DatePicker style={{ width: "100%" }} />
+              </Form.Item>
+              <Form.Item
+                name="amount"
+                label="金额（元）"
+                rules={[{ required: true, message: "请填写金额" }]}
+                style={{ marginBottom: 0 }}
+              >
+                <InputNumber style={{ width: "100%" }} min={0} step={0.01} placeholder="0.00" />
+              </Form.Item>
+            </div>
+
+            <SectionLabel color={theme.color}>消费信息</SectionLabel>
+            <Form.Item
+              name="item"
+              label="消费项目"
+              rules={[{ required: true, message: "请填写消费项目" }]}
+            >
+              <Input placeholder="如停车费、行车记录仪、脚垫" />
+            </Form.Item>
             <Form.Item name="remark" label="备注">
               <Input.TextArea rows={2} />
             </Form.Item>

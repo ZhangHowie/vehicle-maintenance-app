@@ -108,9 +108,9 @@ export default function Settings() {
           }
         },
       });
-      const { importedVehicles, importedMaintenance, importedFuel, importedImages } = res.data;
+      const { importedVehicles, importedMaintenance, importedFuel, importedExpense, importedImages } = res.data;
       message.success(
-        `导入成功：车辆 ${importedVehicles} 辆（含封面图片 ${importedImages ?? 0} 张），保养记录 ${importedMaintenance} 条，油耗记录 ${importedFuel} 条`
+        `导入成功：车辆 ${importedVehicles} 辆（含封面图片 ${importedImages ?? 0} 张），保养记录 ${importedMaintenance} 条，油耗记录 ${importedFuel} 条，消费记录 ${importedExpense ?? 0} 条`
       );
       // 导入的车辆/记录不会自动出现在当前页面已加载的数据里，刷新一下让首页、车辆列表
       // 立刻看到导入结果，避免用户以为“导入成功了但数据没变”。
@@ -134,11 +134,12 @@ export default function Settings() {
       <Card style={{ borderRadius: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <Avatar size={48} style={{ backgroundColor: BRAND.primary, fontSize: 18 }}>
-            {user?.email?.[0]?.toUpperCase()}
+            {user?.username?.[0]?.toUpperCase()}
           </Avatar>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>{user?.email}</div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>{user?.username}</div>
             <div style={{ fontSize: 12, color: "#999" }}>
+              {user?.email ? `${user.email} · ` : ""}
               两步验证：{user?.totpEnabled ? "已开启" : "未开启"}
             </div>
           </div>

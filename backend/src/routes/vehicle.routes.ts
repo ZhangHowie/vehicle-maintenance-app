@@ -5,6 +5,7 @@ import { uploadCoverImage } from "../middleware/upload";
 import * as vehicle from "../controllers/vehicle.controller";
 import maintenanceRouter from "./maintenance.routes";
 import fuelRouter from "./fuel.routes";
+import expenseRouter from "./expense.routes";
 
 const router = Router();
 router.use(requireAuth);
@@ -18,5 +19,6 @@ router.post("/:id/cover", uploadCoverImage.single("file"), asyncHandler(vehicle.
 
 router.use("/:vehicleId/maintenance-records", maintenanceRouter);
 router.use("/:vehicleId/fuel-records", fuelRouter);
+router.use("/:vehicleId/expense-records", expenseRouter);
 
 export default router;

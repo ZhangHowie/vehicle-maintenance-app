@@ -21,12 +21,14 @@ import { toPlain } from "../utils/serialize";
 //
 // v1（早期版本）：vehicles[].{name,brand,model,plateNo,defaultFuelType,maintenanceRecords,fuelRecords}
 //                 不含封面图片、不含裁剪范围。
-// v2（当前版本）：在 v1 基础上新增 vehicles[].coverImage（图片内容以 base64 内嵌，
+// v2：在 v1 基础上新增 vehicles[].coverImage（图片内容以 base64 内嵌，
 //                 不是只存一个引用别的服务器上文件的 URL——否则导入到另一台机器/换了新的
 //                 uploads 数据卷之后图片必然是失效的）和 vehicles[].coverCrop（封面裁剪范围）。
+// v3（当前版本）：在 v2 基础上新增 vehicles[].expenseRecords（其他消费记录：停车费/行车
+//                 记录仪/脚垫等）。v1/v2 文件没有这个字段，导入时按空数组处理。
 // ============================================================================
 
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
 
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -107,6 +109,12 @@ async function buildExportPayload(vehiclesRaw: Awaited<ReturnType<typeof fetchVe
           lastRecorded: f.lastRecorded,
           remark: f.remark ?? null,
         })),
+        expenseRecords: (plain.expenseRecords as any[]).map((e) => ({
+          date: e.date instanceof Date ? e.date.toISOString() : e.date,
+          item: e.item,
+          amount: e.amount,
+          remark: e.remark ?? null,
+        })),
       };
     })
   );
@@ -122,7 +130,7 @@ async function buildExportPayload(vehiclesRaw: Awaited<ReturnType<typeof fetchVe
 function fetchVehiclesForExport(userId: string) {
   return prisma.vehicle.findMany({
     where: { userId },
-    include: { maintenanceRecords: { include: { items: true } }, fuelRecords: true },
+    include: { maintenanceRecords: { include: { items: true } }, fuelRecords: true, expenseRecords: true },
     orderBy: { createdAt: "asc" },
   });
 }
@@ -142,6 +150,7 @@ export async function exportData(req: Request, res: Response) {
 
     const maintenanceRows = ["车辆,日期,里程,项目,品牌,数量,单价,优惠金额,备注"];
     const fuelRows = ["车辆,日期,里程,加油量(L),单价,油品,是否加满,上次是否记录,备注"];
+    const expenseRows = ["车辆,日期,项目,金额,备注"];
 
     for (const v of payload.vehicles) {
       for (const r of v.maintenanceRecords) {
@@ -166,10 +175,16 @@ export async function exportData(req: Request, res: Response) {
           [v.name, f.date, f.mileage, f.volume, f.unitPrice, f.fuelType, f.isFullTank, f.lastRecorded, String(f.remark ?? "").replace(/,/g, "，")].join(",")
         );
       }
+      for (const e of v.expenseRecords) {
+        expenseRows.push(
+          [v.name, e.date, e.item, e.amount, String(e.remark ?? "").replace(/,/g, "，")].join(",")
+        );
+      }
     }
 
     archive.append(maintenanceRows.join("\n"), { name: "maintenance_records.csv" });
     archive.append(fuelRows.join("\n"), { name: "fuel_records.csv" });
+    archive.append(expenseRows.join("\n"), { name: "expense_records.csv" });
     // 完整 JSON（含图片）也一并打进压缩包，CSV 只是给人肉眼看/导 Excel 用的，
     // 真正要拿去导入恢复数据，请用这份 full_export.json。
     archive.append(JSON.stringify(payload, null, 2), { name: "full_export.json" });
@@ -247,6 +262,17 @@ const vehicleImportSchema = z.object({
       })
     )
     .default([]),
+  // v1/v2 导出文件没有这个字段，缺失时按空数组处理（不是导入失败）
+  expenseRecords: z
+    .array(
+      z.object({
+        date: z.string(),
+        item: z.string(),
+        amount: z.coerce.number(),
+        remark: z.string().nullable().optional(),
+      })
+    )
+    .default([]),
 });
 
 const importPayloadSchema = z.object({
@@ -310,6 +336,7 @@ export async function importData(req: Request, res: Response) {
         let importedVehicles = 0;
         let importedMaintenance = 0;
         let importedFuel = 0;
+        let importedExpense = 0;
         let importedImages = 0;
 
         for (const v of body.vehicles) {
@@ -388,9 +415,22 @@ export async function importData(req: Request, res: Response) {
             });
             importedFuel++;
           }
+
+          for (const e of v.expenseRecords) {
+            await tx.expenseRecord.create({
+              data: {
+                vehicleId: vehicle.id,
+                date: new Date(e.date),
+                item: e.item,
+                amount: e.amount,
+                remark: e.remark ?? undefined,
+              },
+            });
+            importedExpense++;
+          }
         }
 
-        return { importedVehicles, importedMaintenance, importedFuel, importedImages };
+        return { importedVehicles, importedMaintenance, importedFuel, importedExpense, importedImages };
       },
       // 一次性导入多辆车、多条记录、多张图片可能比默认的 5s 事务超时要长，适当放宽。
       { maxWait: 15000, timeout: 120000 }

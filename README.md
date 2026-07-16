@@ -122,10 +122,10 @@ HTTPS_PORT=8083
 
 首次启动时，若数据库中还没有任何账号，后端会**自动创建一个默认管理员账号**：
 
-- 邮箱：`admin@example.com`
+- 用户名：`admin`
 - 密码：`Admin123456`
 
-可以在 `.env` 中通过 `ADMIN_EMAIL` / `ADMIN_PASSWORD` 自定义这个初始账号（建议部署前就改掉，而不是登录后再改）。
+可以在 `.env` 中通过 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 自定义这个初始账号（建议部署前就改掉，而不是登录后再改）。登录用的是用户名，不是邮箱；邮箱是可选项，只在需要用「忘记密码」找回时才需要绑定（`ADMIN_EMAIL`）。
 
 **用默认账号登录后，系统会强制跳转到"修改密码"页面，必须改密后才能使用其他功能**，改密时需要输入当前密码（即上面的默认密码）。改密只需做一次，之后正常登录不会再提示。
 
@@ -190,7 +190,8 @@ HTTPS_PORT=8083
 | `MAIL_FROM` | 邮件发件人显示名 | `车辆保养管理 <no-reply@example.com>` |
 | `FRONTEND_ORIGIN` | 后端 CORS 允许的前端来源，同时也是"忘记密码"邮件里重置链接的域名前缀 | `https://localhost` |
 | `VITE_API_BASE_URL` | 前端请求 API 的基础路径，构建时注入前端，一般无需改动 | `/api` |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | 首次启动、数据库还没有任何账号时自动创建的默认管理员账号，登录后会强制要求改密。数据库已有账号时这两个变量不再生效 | `admin@example.com` / `Admin123456` |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | 首次启动、数据库还没有任何账号时自动创建的默认管理员账号，登录后会强制要求改密。数据库已有账号时这两个变量不再生效 | `admin` / `Admin123456` |
+| `ADMIN_EMAIL` | 可选，给默认管理员账号绑定的邮箱，仅用于「忘记密码」找回，不填则该账号没有找回密码入口 | - |
 
 HTTPS 证书路径不通过环境变量配置，固定为 `certs/fullchain.pem` 与 `certs/privkey.pem`，详见下方「启用 HTTPS」。
 

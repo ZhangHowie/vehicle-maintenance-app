@@ -17,6 +17,22 @@ body {
   }
 }
 
+/* iOS Safari 会在聚焦 font-size < 16px 的输入框时把整页放大，输完还得手动缩回去，
+   移动端体验很差。这里把所有 antd 表单控件的实际输入文字统一提到 16px 从根源避免，
+   不影响桌面端（该规则只在窄屏生效）。 */
+@media (max-width: 767px) {
+  .ant-input,
+  .ant-input-affix-wrapper,
+  .ant-input-number-input,
+  .ant-select-selector,
+  .ant-select-selection-search-input,
+  .ant-select-selection-item,
+  .ant-picker-input > input,
+  textarea.ant-input {
+    font-size: 16px !important;
+  }
+}
+
 /* MobileSheet 组件用：把普通居中 Modal 改成贴底部的全宽抽屉。
    直接用 fixed 定位覆盖 antd 默认的居中/margin 逻辑，不依赖 wrap 的 flex 对齐，
    避免和 antd 内部定位方式打架。 */

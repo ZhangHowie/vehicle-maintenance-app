@@ -11,12 +11,18 @@ import { sendPasswordResetEmail } from "../utils/mailer";
 import { generateTotpSecret, generateQrCodeDataUrl, verifyTotpToken } from "../utils/totp";
 
 const registerSchema = z.object({
-  email: z.string().email("邮箱格式不正确"),
+  username: z
+    .string()
+    .min(3, "用户名至少 3 位")
+    .max(32, "用户名最多 32 位")
+    .regex(/^[a-zA-Z0-9_]+$/, "用户名只能包含字母、数字、下划线"),
+  // 邮箱可选，只用于找回密码；不填的话就没有找回密码入口
+  email: z.string().email("邮箱格式不正确").optional().or(z.literal("").transform(() => undefined)),
   password: z.string().min(8, "密码至少 8 位"),
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  username: z.string(),
   password: z.string(),
 });
 
@@ -25,7 +31,7 @@ const IP_ABUSE_WINDOW_MINUTES = 15;
 const IP_ABUSE_MAX_FAILURES = 20;
 const IP_BLACKLIST_MINUTES = 60;
 
-async function recordLoginAttempt(params: { userId?: string; email: string; ip: string; success: boolean }) {
+async function recordLoginAttempt(params: { userId?: string; identifier: string; ip: string; success: boolean }) {
   await prisma.loginAttempt.create({ data: params });
 
   if (!params.success) {
@@ -54,9 +60,16 @@ function issueTokens(userId: string) {
   };
 }
 
-function toUserResponse(user: { id: string; email: string; totpEnabled: boolean; mustChangePassword: boolean }) {
+function toUserResponse(user: {
+  id: string;
+  username: string;
+  email: string | null;
+  totpEnabled: boolean;
+  mustChangePassword: boolean;
+}) {
   return {
     id: user.id,
+    username: user.username,
     email: user.email,
     totpEnabled: user.totpEnabled,
     mustChangePassword: user.mustChangePassword,
@@ -68,11 +81,17 @@ export async function register(req: Request, res: Response) {
   if (!isStrongPassword(body.password)) {
     throw new ApiError(400, "密码至少 8 位，且需包含大小写字母和数字");
   }
-  const existing = await prisma.user.findUnique({ where: { email: body.email } });
-  if (existing) throw new ApiError(409, "该邮箱已被注册");
+  const existingUsername = await prisma.user.findUnique({ where: { username: body.username } });
+  if (existingUsername) throw new ApiError(409, "该用户名已被注册");
+  if (body.email) {
+    const existingEmail = await prisma.user.findUnique({ where: { email: body.email } });
+    if (existingEmail) throw new ApiError(409, "该邮箱已被注册");
+  }
 
   const passwordHash = await hashPassword(body.password);
-  const user = await prisma.user.create({ data: { email: body.email, passwordHash } });
+  const user = await prisma.user.create({
+    data: { username: body.username, email: body.email ?? null, passwordHash },
+  });
   const tokens = issueTokens(user.id);
   res.status(201).json({ user: toUserResponse(user), ...tokens });
 }
@@ -80,11 +99,11 @@ export async function register(req: Request, res: Response) {
 export async function login(req: Request, res: Response) {
   const body = loginSchema.parse(req.body);
   const ip = getClientIp(req);
-  const user = await prisma.user.findUnique({ where: { email: body.email } });
+  const user = await prisma.user.findUnique({ where: { username: body.username } });
 
   if (!user) {
-    await recordLoginAttempt({ email: body.email, ip, success: false });
-    throw new ApiError(401, "邮箱或密码错误");
+    await recordLoginAttempt({ identifier: body.username, ip, success: false });
+    throw new ApiError(401, "用户名或密码错误");
   }
 
   if (user.lockedUntil && user.lockedUntil > new Date()) {
@@ -103,16 +122,16 @@ export async function login(req: Request, res: Response) {
         lockedUntil: shouldLock ? new Date(Date.now() + env.loginLockMinutes * 60 * 1000) : null,
       },
     });
-    await recordLoginAttempt({ userId: user.id, email: body.email, ip, success: false });
+    await recordLoginAttempt({ userId: user.id, identifier: body.username, ip, success: false });
     if (shouldLock) {
       throw new ApiError(423, `失败次数过多，账号已锁定 ${env.loginLockMinutes} 分钟`);
     }
-    throw new ApiError(401, "邮箱或密码错误");
+    throw new ApiError(401, "用户名或密码错误");
   }
 
   // 密码正确，重置失败计数
   await prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: null } });
-  await recordLoginAttempt({ userId: user.id, email: body.email, ip, success: true });
+  await recordLoginAttempt({ userId: user.id, identifier: body.username, ip, success: true });
 
   if (user.totpEnabled) {
     const preAuthToken = jwt.sign({ userId: user.id, purpose: "totp" }, env.jwtAccessSecret, { expiresIn: "5m" });
@@ -223,7 +242,7 @@ export async function changePassword(req: Request, res: Response) {
 
 export async function totpSetup(req: Request, res: Response) {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! } });
-  const secret = generateTotpSecret(user.email);
+  const secret = generateTotpSecret(user.email ?? user.username);
   await prisma.user.update({ where: { id: user.id }, data: { totpSecret: secret.base32, totpEnabled: false } });
   const qrCode = await generateQrCodeDataUrl(secret.otpauth_url!);
   res.json({ secret: secret.base32, qrCode });

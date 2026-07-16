@@ -8,6 +8,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      // 手动在 main.tsx 里用 virtual:pwa-register 接入，而不是用默认注入的极简
+      // registerSW.js（那个版本只 register()，检测到新版本后不会自动刷新页面）。
+      injectRegister: false,
       includeAssets: ["favicon.svg", "icons/apple-touch-icon.png"],
       manifest: {
         name: "车辆保养管理",

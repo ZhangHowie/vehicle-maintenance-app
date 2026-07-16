@@ -20,6 +20,7 @@ import {
   DeleteOutlined,
   ToolOutlined,
   ThunderboltOutlined,
+  ShoppingOutlined,
   ArrowLeftOutlined,
   SwapOutlined,
 } from "@ant-design/icons";
@@ -37,9 +38,10 @@ import { BRAND, RECORD_THEME } from "../theme";
 const CURRENT_YEAR = new Date().getFullYear();
 const ALL_YEARS = "all" as const;
 type YearFilter = number | typeof ALL_YEARS;
-type ExpenseFilter = "all" | "maintenance" | "fuel";
+// 月支出趋势图的类型筛选（跟下面"其他消费"记录类型是两回事，这里指的是趋势图要看哪几条线）
+type TrendFilter = "all" | "maintenance" | "fuel" | "expense";
 
-// 保养/油耗切换按钮上图标+文字的小标签，颜色跟随各自的主题色（保养=暖橙，油耗=青蓝）
+// 保养/油耗/消费切换按钮上图标+文字的小标签，颜色跟随各自的主题色（保养=暖橙，油耗=青蓝，消费=紫）
 function SwitchLabel({ icon, color, children }: { icon: React.ReactNode; color: string; children: React.ReactNode }) {
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -53,6 +55,13 @@ function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+const RECORD_VIEW_LABEL: Record<RecordType, string> = { maintenance: "保养", fuel: "油耗", expense: "消费" };
+const DETAIL_ICON: Record<RecordType, React.ReactNode> = {
+  maintenance: <ToolOutlined />,
+  fuel: <ThunderboltOutlined />,
+  expense: <ShoppingOutlined />,
+};
+
 export default function VehicleDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -62,6 +71,7 @@ export default function VehicleDetail() {
   const [allVehicles, setAllVehicles] = useState<{ id: string; name: string }[]>([]);
   const [maintenanceRecords, setMaintenanceRecords] = useState<any[]>([]);
   const [fuelRecords, setFuelRecords] = useState<any[]>([]);
+  const [expenseRecords, setExpenseRecords] = useState<any[]>([]);
   const [stats, setStats] = useState<{
     recentLitersPer100km: number | null;
     averageLitersPer100km: number | null;
@@ -80,9 +90,9 @@ export default function VehicleDetail() {
 
   // 默认按当前年份筛选统计和记录列表，也可以切到往年或"全部"
   const [year, setYear] = useState<YearFilter>(CURRENT_YEAR);
-  // 月支出趋势图的类型筛选：全部 / 只看保养 / 只看加油
-  const [expenseFilter, setExpenseFilter] = useState<ExpenseFilter>("all");
-  // 下方记录列表：保养 / 油耗 二选一切换显示，而不是两个表格堆在一起，
+  // 月支出趋势图的类型筛选：全部 / 只看保养 / 只看加油 / 只看消费
+  const [expenseFilter, setExpenseFilter] = useState<TrendFilter>("all");
+  // 下方记录列表：保养 / 油耗 / 消费 三选一切换显示，而不是三个表格堆在一起，
   // 减少移动端要滚动的长度。
   const [recordView, setRecordView] = useState<RecordType>("maintenance");
 
@@ -90,6 +100,7 @@ export default function VehicleDetail() {
     api.get(`/vehicles/${id}`).then((res) => setVehicle(res.data));
     api.get(`/vehicles/${id}/maintenance-records`).then((res) => setMaintenanceRecords(res.data));
     api.get(`/vehicles/${id}/fuel-records`).then((res) => setFuelRecords(res.data));
+    api.get(`/vehicles/${id}/expense-records`).then((res) => setExpenseRecords(res.data));
     api.get(`/vehicles/${id}/fuel-records/stats`).then((res) => setStats(res.data));
   }
 
@@ -120,6 +131,12 @@ export default function VehicleDetail() {
     notifyRecordsUpdated();
   }
 
+  async function deleteExpense(recordId: string) {
+    await api.delete(`/vehicles/${id}/expense-records/${recordId}`);
+    loadAll();
+    notifyRecordsUpdated();
+  }
+
   function handleModalSuccess() {
     loadAll();
     notifyRecordsUpdated();
@@ -130,12 +147,13 @@ export default function VehicleDetail() {
     const years = new Set<number>([CURRENT_YEAR]);
     for (const r of maintenanceRecords) years.add(dayjs(r.date).year());
     for (const r of fuelRecords) years.add(dayjs(r.date).year());
+    for (const r of expenseRecords) years.add(dayjs(r.date).year());
     const options: { label: string; value: YearFilter }[] = Array.from(years)
       .sort((a, b) => b - a)
       .map((y) => ({ label: `${y}年`, value: y }));
     options.push({ label: "全部", value: ALL_YEARS });
     return options;
-  }, [maintenanceRecords, fuelRecords]);
+  }, [maintenanceRecords, fuelRecords, expenseRecords]);
 
   const filteredMaintenance = useMemo(() => {
     if (year === ALL_YEARS) return maintenanceRecords;
@@ -147,15 +165,22 @@ export default function VehicleDetail() {
     return fuelRecords.filter((r) => dayjs(r.date).year() === year);
   }, [fuelRecords, year]);
 
-  // 支出构成：保养 / 加油 两项，替代原先按保养项目拆分的饼图
+  const filteredExpense = useMemo(() => {
+    if (year === ALL_YEARS) return expenseRecords;
+    return expenseRecords.filter((r) => dayjs(r.date).year() === year);
+  }, [expenseRecords, year]);
+
+  // 支出构成：保养 / 加油 / 其他消费 三项，替代原先按保养项目拆分的饼图
   const expenseComposition = useMemo(() => {
     const maintenanceCost = filteredMaintenance.reduce((sum, r) => sum + Number(r.totalPrice), 0);
     const fuelCost = filteredFuel.reduce((sum, r) => sum + Number(r.volume) * Number(r.unitPrice), 0);
+    const otherCost = filteredExpense.reduce((sum, r) => sum + Number(r.amount), 0);
     return [
       { name: "保养", value: Math.round(maintenanceCost * 100) / 100, color: RECORD_THEME.maintenance.color },
       { name: "油费", value: Math.round(fuelCost * 100) / 100, color: RECORD_THEME.fuel.color },
+      { name: "其他消费", value: Math.round(otherCost * 100) / 100, color: RECORD_THEME.expense.color },
     ].filter((d) => d.value > 0);
-  }, [filteredMaintenance, filteredFuel]);
+  }, [filteredMaintenance, filteredFuel, filteredExpense]);
 
   // 每条加油记录自己的百公里油耗：只有"加满"且成功和上一个加满点构成一段区间的记录才有值
   // （对应 fuelStats 接口按里程算出的 segments，用 toMileage 对应到具体是哪条记录）。
@@ -165,12 +190,13 @@ export default function VehicleDetail() {
     return map;
   }, [stats.segments]);
 
-  // 本期（受年份筛选影响）汇总：总支出、总保养、总加油、平均每天行驶里程、平均每公里油费。
+  // 本期（受年份筛选影响）汇总：总支出、总保养、总加油、总消费、平均每天行驶里程、平均每公里油费。
   // 平均行驶里程 / 平均油费用"本期内里程最大值 - 最小值"除以"最早/最晚记录相差天数"来估算。
   const periodStats = useMemo(() => {
     const totalMaintenanceCost = filteredMaintenance.reduce((sum, r) => sum + Number(r.totalPrice), 0);
     const totalFuelCost = filteredFuel.reduce((sum, r) => sum + Number(r.volume) * Number(r.unitPrice), 0);
-    const totalCost = totalMaintenanceCost + totalFuelCost;
+    const totalExpenseCost = filteredExpense.reduce((sum, r) => sum + Number(r.amount), 0);
+    const totalCost = totalMaintenanceCost + totalFuelCost + totalExpenseCost;
 
     const dated = [...filteredMaintenance, ...filteredFuel]
       .filter((r) => typeof r.mileage === "number")
@@ -192,17 +218,18 @@ export default function VehicleDetail() {
     return {
       totalMaintenanceCost: Math.round(totalMaintenanceCost * 100) / 100,
       totalFuelCost: Math.round(totalFuelCost * 100) / 100,
+      totalExpenseCost: Math.round(totalExpenseCost * 100) / 100,
       totalCost: Math.round(totalCost * 100) / 100,
       avgDistancePerDay: avgDistancePerDay !== null ? Math.round(avgDistancePerDay * 10) / 10 : null,
       avgFuelCostPerKm: avgFuelCostPerKm !== null ? Math.round(avgFuelCostPerKm * 100) / 100 : null,
     };
-  }, [filteredMaintenance, filteredFuel]);
+  }, [filteredMaintenance, filteredFuel, filteredExpense]);
 
   // 月支出趋势：选中具体年份就固定展示该年 1-12 月；选"全部"就展示这辆车从最早到最新记录跨越的每个月
   const monthlyExpense = useMemo(() => {
     let months: string[];
     if (year === ALL_YEARS) {
-      const allDates = [...maintenanceRecords, ...fuelRecords].map((r) => dayjs(r.date));
+      const allDates = [...maintenanceRecords, ...fuelRecords, ...expenseRecords].map((r) => dayjs(r.date));
       if (allDates.length === 0) {
         months = [monthKey(new Date())];
       } else {
@@ -220,7 +247,7 @@ export default function VehicleDetail() {
       months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
     }
 
-    const map = new Map(months.map((m) => [m, { month: m, maintenanceCost: 0, fuelCost: 0 }]));
+    const map = new Map(months.map((m) => [m, { month: m, maintenanceCost: 0, fuelCost: 0, expenseCost: 0 }]));
     for (const r of maintenanceRecords) {
       const key = dayjs(r.date).format("YYYY-MM");
       const entry = map.get(key);
@@ -231,18 +258,25 @@ export default function VehicleDetail() {
       const entry = map.get(key);
       if (entry) entry.fuelCost += Number(r.volume) * Number(r.unitPrice);
     }
+    for (const r of expenseRecords) {
+      const key = dayjs(r.date).format("YYYY-MM");
+      const entry = map.get(key);
+      if (entry) entry.expenseCost += Number(r.amount);
+    }
     return months.map((m) => {
       const entry = map.get(m)!;
       return {
         month: m,
         maintenanceCost: Math.round(entry.maintenanceCost * 100) / 100,
         fuelCost: Math.round(entry.fuelCost * 100) / 100,
+        expenseCost: Math.round(entry.expenseCost * 100) / 100,
       };
     });
-  }, [maintenanceRecords, fuelRecords, year]);
+  }, [maintenanceRecords, fuelRecords, expenseRecords, year]);
 
   const showMaintenanceLine = expenseFilter === "all" || expenseFilter === "maintenance";
   const showFuelLine = expenseFilter === "all" || expenseFilter === "fuel";
+  const showExpenseLine = expenseFilter === "all" || expenseFilter === "expense";
 
   if (!vehicle) return null;
 
@@ -359,6 +393,15 @@ export default function VehicleDetail() {
         </Col>
         <Col xs={12} sm={8}>
           <StatCard
+            title={`其他消费金额${year === ALL_YEARS ? "" : `（${year}）`}`}
+            value={periodStats.totalExpenseCost}
+            precision={2}
+            prefix="¥"
+            color={RECORD_THEME.expense.color}
+          />
+        </Col>
+        <Col xs={12} sm={8}>
+          <StatCard
             title="最近百公里油耗 (L)"
             value={stats.recentLitersPer100km ?? "暂无数据"}
             color={RECORD_THEME.fuel.color}
@@ -390,6 +433,9 @@ export default function VehicleDetail() {
         </Col>
         <Col xs={12} sm={8}>
           <StatCard title="油耗记录数" value={filteredFuel.length} color={RECORD_THEME.fuel.color} />
+        </Col>
+        <Col xs={12} sm={8}>
+          <StatCard title="消费记录数" value={filteredExpense.length} color={RECORD_THEME.expense.color} />
         </Col>
       </Row>
 
@@ -427,17 +473,18 @@ export default function VehicleDetail() {
               <Segmented
                 size="small"
                 value={expenseFilter}
-                onChange={(v) => setExpenseFilter(v as ExpenseFilter)}
+                onChange={(v) => setExpenseFilter(v as TrendFilter)}
                 options={[
                   { label: "全部", value: "all" },
                   { label: "保养", value: "maintenance" },
                   { label: "加油", value: "fuel" },
+                  { label: "消费", value: "expense" },
                 ]}
               />
             }
             style={{ height: 320 }}
           >
-            {monthlyExpense.some((m) => m.maintenanceCost > 0 || m.fuelCost > 0) ? (
+            {monthlyExpense.some((m) => m.maintenanceCost > 0 || m.fuelCost > 0 || m.expenseCost > 0) ? (
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={monthlyExpense}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -461,6 +508,16 @@ export default function VehicleDetail() {
                       dataKey="fuelCost"
                       name="加油支出"
                       stroke={RECORD_THEME.fuel.color}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  )}
+                  {showExpenseLine && (
+                    <Line
+                      type="monotone"
+                      dataKey="expenseCost"
+                      name="其他消费"
+                      stroke={RECORD_THEME.expense.color}
                       strokeWidth={2}
                       dot={false}
                     />
@@ -510,6 +567,14 @@ export default function VehicleDetail() {
                   </SwitchLabel>
                 ),
               },
+              {
+                value: "expense",
+                label: (
+                  <SwitchLabel icon={<ShoppingOutlined />} color={RECORD_THEME.expense.color}>
+                    消费记录
+                  </SwitchLabel>
+                ),
+              },
             ]}
           />
           <Button
@@ -518,7 +583,7 @@ export default function VehicleDetail() {
             onClick={() => setModalState({ type: recordView })}
             style={{ background: RECORD_THEME[recordView].color, borderColor: RECORD_THEME[recordView].color }}
           >
-            添加{recordView === "maintenance" ? "保养" : "油耗"}记录
+            添加{RECORD_VIEW_LABEL[recordView]}记录
           </Button>
         </div>
 
@@ -543,7 +608,7 @@ export default function VehicleDetail() {
               { title: "总价", dataIndex: "totalPrice", render: (v: number) => `¥${Number(v).toFixed(2)}` },
             ]}
           />
-        ) : (
+        ) : recordView === "fuel" ? (
           <Table
             rowKey="id"
             dataSource={filteredFuel}
@@ -564,6 +629,22 @@ export default function VehicleDetail() {
                   return v !== undefined ? v : "-";
                 },
               },
+            ]}
+          />
+        ) : (
+          <Table
+            rowKey="id"
+            dataSource={filteredExpense}
+            scroll={{ x: true }}
+            pagination={{ pageSize: 10, hideOnSinglePage: true }}
+            onRow={(r) => ({
+              onClick: () => setDetailRecord({ type: "expense", record: r }),
+              style: { cursor: "pointer" },
+            })}
+            columns={[
+              { title: "日期", dataIndex: "date", render: (v) => dayjs(v).format("YYYY-MM-DD") },
+              { title: "项目", dataIndex: "item" },
+              { title: "金额", dataIndex: "amount", render: (v: number) => `¥${Number(v).toFixed(2)}` },
             ]}
           />
         )}
@@ -602,9 +683,9 @@ export default function VehicleDetail() {
                   fontSize: 14,
                 }}
               >
-                {detailRecord.type === "maintenance" ? <ToolOutlined /> : <ThunderboltOutlined />}
+                {DETAIL_ICON[detailRecord.type]}
               </span>
-              {detailRecord.type === "maintenance" ? "保养记录详情" : "油耗记录详情"}
+              {RECORD_VIEW_LABEL[detailRecord.type]}记录详情
             </span>
           }
           footer={[
@@ -614,7 +695,8 @@ export default function VehicleDetail() {
               title="确认删除该条记录？"
               onConfirm={async () => {
                 if (detailRecord.type === "maintenance") await deleteMaintenance(detailRecord.record.id);
-                else await deleteFuel(detailRecord.record.id);
+                else if (detailRecord.type === "fuel") await deleteFuel(detailRecord.record.id);
+                else await deleteExpense(detailRecord.record.id);
                 setDetailRecord(null);
               }}
             >
@@ -680,7 +762,7 @@ export default function VehicleDetail() {
                 ]}
               />
             </>
-          ) : (
+          ) : detailRecord.type === "fuel" ? (
             <Descriptions bordered size="small" column={2}>
               <Descriptions.Item label="日期">{dayjs(detailRecord.record.date).format("YYYY-MM-DD")}</Descriptions.Item>
               <Descriptions.Item label="里程">{detailRecord.record.mileage} km</Descriptions.Item>
@@ -698,6 +780,17 @@ export default function VehicleDetail() {
               <Descriptions.Item label="是否跳枪">{detailRecord.record.isFullTank ? "是" : "否"}</Descriptions.Item>
               <Descriptions.Item label="上次是否记录" span={2}>
                 {detailRecord.record.lastRecorded ? "是" : "否"}
+              </Descriptions.Item>
+              <Descriptions.Item label="备注" span={2}>
+                {detailRecord.record.remark || "-"}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : (
+            <Descriptions bordered size="small" column={2}>
+              <Descriptions.Item label="日期">{dayjs(detailRecord.record.date).format("YYYY-MM-DD")}</Descriptions.Item>
+              <Descriptions.Item label="金额">¥{Number(detailRecord.record.amount).toFixed(2)}</Descriptions.Item>
+              <Descriptions.Item label="消费项目" span={2}>
+                {detailRecord.record.item}
               </Descriptions.Item>
               <Descriptions.Item label="备注" span={2}>
                 {detailRecord.record.remark || "-"}

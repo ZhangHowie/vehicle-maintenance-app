@@ -9,6 +9,7 @@ import {
   PlusOutlined,
   ToolOutlined,
   ThunderboltOutlined,
+  ShoppingOutlined,
 } from "@ant-design/icons";
 import { useAuth } from "../contexts/AuthContext";
 import QuickAddFloatButton from "./QuickAddFloatButton";
@@ -20,10 +21,10 @@ import { BRAND, RECORD_THEME, SURFACE } from "../theme";
 const { Header, Content, Sider } = AntLayout;
 const { useBreakpoint } = Grid;
 
-// 移动端底部导航栏中间的凸起加号按钮：用保养橙/加油青蓝对角劈开，直接把全站
-// 记录类型的配色系统用在导航本身上，点开是"保养/加油"两个选项——桌面端的
-// 悬浮加号按钮（QuickAddFloatButton）在移动端不再单独渲染，这个按钮就是它
-// 在移动端导航栏里的等价入口。
+// 移动端底部导航栏中间的凸起加号按钮：用保养橙/加油青蓝/消费紫三色等分劈开，
+// 直接把全站记录类型的配色系统用在导航本身上，点开是"保养/加油/消费"三个
+// 选项——桌面端的悬浮加号按钮（QuickAddFloatButton）在移动端不再单独渲染，
+// 这个按钮就是它在移动端导航栏里的等价入口。
 function CenterAddButton() {
   const navigate = useNavigate();
   const [flyoutOpen, setFlyoutOpen] = useState(false);
@@ -66,6 +67,17 @@ function CenterAddButton() {
             >
               添加油耗记录
             </Button>
+            <Button
+              type="text"
+              icon={<ShoppingOutlined style={{ color: RECORD_THEME.expense.color }} />}
+              onClick={() => {
+                setFlyoutOpen(false);
+                openModal("expense");
+              }}
+              style={{ width: "100%", textAlign: "left" }}
+            >
+              添加消费记录
+            </Button>
           </Space>
         }
       >
@@ -78,7 +90,7 @@ function CenterAddButton() {
             marginTop: -28,
             borderRadius: "50%",
             border: `3px solid ${SURFACE.card}`,
-            background: `linear-gradient(135deg, ${RECORD_THEME.maintenance.color} 0 50%, ${RECORD_THEME.fuel.color} 50% 100%)`,
+            background: `conic-gradient(from 180deg, ${RECORD_THEME.maintenance.color} 0 120deg, ${RECORD_THEME.fuel.color} 120deg 240deg, ${RECORD_THEME.expense.color} 240deg 360deg)`,
             boxShadow: "0 6px 16px rgba(0,0,0,0.22)",
             display: "flex",
             alignItems: "center",
@@ -201,9 +213,9 @@ export default function Layout() {
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <span className="desktop-only" style={{ display: "flex", alignItems: "center", gap: 8, color: "#555" }}>
               <Avatar size="small" style={{ backgroundColor: BRAND.primary }}>
-                {user?.email?.[0]?.toUpperCase()}
+                {user?.username?.[0]?.toUpperCase()}
               </Avatar>
-              {user?.email}
+              {user?.username}
             </span>
             <Button
               icon={<LogoutOutlined />}

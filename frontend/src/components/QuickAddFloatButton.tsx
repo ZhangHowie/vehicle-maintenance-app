@@ -1,6 +1,6 @@
 import React from "react";
 import { FloatButton } from "antd";
-import { PlusOutlined, ToolOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { PlusOutlined, ToolOutlined, ThunderboltOutlined, ShoppingOutlined } from "@ant-design/icons";
 import RecordFormModal from "./RecordFormModal";
 import { RECORD_THEME } from "../theme";
 import { useQuickAddRecord } from "../hooks/useQuickAddRecord";
@@ -25,6 +25,11 @@ export default function QuickAddFloatButton() {
           icon={<ThunderboltOutlined style={{ color: RECORD_THEME.fuel.color }} />}
           tooltip="添加油耗记录"
           onClick={() => openModal("fuel")}
+        />
+        <FloatButton
+          icon={<ShoppingOutlined style={{ color: RECORD_THEME.expense.color }} />}
+          tooltip="添加消费记录"
+          onClick={() => openModal("expense")}
         />
       </FloatButton.Group>
 

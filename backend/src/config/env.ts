@@ -35,6 +35,7 @@ export const env = {
 
   // 首次启动时若数据库中还没有任何账号，会自动创建这个默认管理员账号
   // （强制要求首次登录后修改密码），方便快速开始使用，不需要单独走注册流程
-  adminEmail: process.env.ADMIN_EMAIL ?? "admin@example.com",
+  adminUsername: process.env.ADMIN_USERNAME ?? "admin",
+  adminEmail: process.env.ADMIN_EMAIL || undefined,
   adminPassword: process.env.ADMIN_PASSWORD ?? "Admin123456",
 };

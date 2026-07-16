@@ -11,10 +11,10 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [preAuthToken, setPreAuthToken] = useState<string | null>(null);
 
-  async function onFinish(values: { email: string; password: string }) {
+  async function onFinish(values: { username: string; password: string }) {
     setLoading(true);
     try {
-      const result = await login(values.email, values.password);
+      const result = await login(values.username, values.password);
       if (result.requiresTotp && result.preAuthToken) {
         setPreAuthToken(result.preAuthToken);
       } else {
@@ -56,10 +56,10 @@ export default function Login() {
   }
 
   return (
-    <AuthLayout title="登录" subtitle="使用邮箱和密码登录你的账号">
+    <AuthLayout title="登录" subtitle="使用用户名和密码登录你的账号">
       <Form layout="vertical" onFinish={onFinish}>
-        <Form.Item name="email" label="邮箱" rules={[{ required: true, type: "email", message: "请输入有效邮箱" }]}>
-          <Input autoComplete="username" size="large" placeholder="you@example.com" />
+        <Form.Item name="username" label="用户名" rules={[{ required: true, message: "请输入用户名" }]}>
+          <Input autoComplete="username" size="large" placeholder="admin" />
         </Form.Item>
         <Form.Item name="password" label="密码" rules={[{ required: true, message: "请输入密码" }]}>
           <Input.Password autoComplete="current-password" size="large" />

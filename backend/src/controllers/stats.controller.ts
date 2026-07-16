@@ -3,10 +3,11 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma";
 
 type VehicleWithRecords = Prisma.VehicleGetPayload<{
-  include: { maintenanceRecords: true; fuelRecords: true };
+  include: { maintenanceRecords: true; fuelRecords: true; expenseRecords: true };
 }>;
 type MaintenanceRecordRow = VehicleWithRecords["maintenanceRecords"][number];
 type FuelRecordRow = VehicleWithRecords["fuelRecords"][number];
+type ExpenseRecordRow = VehicleWithRecords["expenseRecords"][number];
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -31,7 +32,7 @@ export async function overview(req: Request, res: Response) {
 
   const vehicles: VehicleWithRecords[] = await prisma.vehicle.findMany({
     where: { userId: req.userId! },
-    include: { maintenanceRecords: true, fuelRecords: true },
+    include: { maintenanceRecords: true, fuelRecords: true, expenseRecords: true },
     orderBy: { createdAt: "asc" },
   });
 
@@ -41,6 +42,7 @@ export async function overview(req: Request, res: Response) {
   for (const v of vehicles) {
     for (const r of v.maintenanceRecords) yearSet.add(r.date.getFullYear());
     for (const r of v.fuelRecords) yearSet.add(r.date.getFullYear());
+    for (const r of v.expenseRecords) yearSet.add(r.date.getFullYear());
   }
   const availableYears = Array.from(yearSet).sort((a, b) => b - a);
 
@@ -49,6 +51,7 @@ export async function overview(req: Request, res: Response) {
   const perVehicle = vehicles.map((v: VehicleWithRecords) => {
     const maintenanceRecords = v.maintenanceRecords.filter((r: MaintenanceRecordRow) => inSelectedYear(r.date));
     const fuelRecords = v.fuelRecords.filter((r: FuelRecordRow) => inSelectedYear(r.date));
+    const expenseRecords = v.expenseRecords.filter((r: ExpenseRecordRow) => inSelectedYear(r.date));
 
     const maintenanceCost = maintenanceRecords.reduce(
       (sum: number, r: MaintenanceRecordRow) => sum + Number(r.totalPrice),
@@ -58,6 +61,7 @@ export async function overview(req: Request, res: Response) {
       (sum: number, r: FuelRecordRow) => sum + Number(r.volume) * Number(r.unitPrice),
       0
     );
+    const expenseCost = expenseRecords.reduce((sum: number, r: ExpenseRecordRow) => sum + Number(r.amount), 0);
     const fuelVolume = fuelRecords.reduce((sum: number, r: FuelRecordRow) => sum + Number(r.volume), 0);
     // 最新里程用全部历史数据算，不受年份筛选影响——里程是累计值，只看某一年没有意义
     const mileages: number[] = [
@@ -71,16 +75,19 @@ export async function overview(req: Request, res: Response) {
       name: v.name,
       maintenanceCost: round2(maintenanceCost),
       fuelCost: round2(fuelCost),
-      totalCost: round2(maintenanceCost + fuelCost),
+      expenseCost: round2(expenseCost),
+      totalCost: round2(maintenanceCost + fuelCost + expenseCost),
       fuelVolume: round2(fuelVolume),
       maintenanceRecordCount: maintenanceRecords.length,
       fuelRecordCount: fuelRecords.length,
+      expenseRecordCount: expenseRecords.length,
       latestMileage,
     };
   });
 
   const totalMaintenanceCost = round2(perVehicle.reduce((sum: number, v) => sum + v.maintenanceCost, 0));
   const totalFuelCost = round2(perVehicle.reduce((sum: number, v) => sum + v.fuelCost, 0));
+  const totalExpenseCost = round2(perVehicle.reduce((sum: number, v) => sum + v.expenseCost, 0));
 
   // 支出趋势：选中具体年份时固定展示该年 1-12 月；选"全部"时展示从最早到最新记录跨越的每个月
   // （个人用车数据量级下点数完全可控，不需要额外分页）。
@@ -89,7 +96,7 @@ export async function overview(req: Request, res: Response) {
     let minDate: Date | null = null;
     let maxDate: Date | null = null;
     for (const v of vehicles) {
-      for (const r of [...v.maintenanceRecords, ...v.fuelRecords]) {
+      for (const r of [...v.maintenanceRecords, ...v.fuelRecords, ...v.expenseRecords]) {
         if (!minDate || r.date < minDate) minDate = r.date;
         if (!maxDate || r.date > maxDate) maxDate = r.date;
       }
@@ -109,7 +116,7 @@ export async function overview(req: Request, res: Response) {
     months = Array.from({ length: 12 }, (_, i) => monthKey(new Date(yearParam, i, 1)));
   }
 
-  const monthlyMap = new Map(months.map((m) => [m, { month: m, maintenanceCost: 0, fuelCost: 0 }]));
+  const monthlyMap = new Map(months.map((m) => [m, { month: m, maintenanceCost: 0, fuelCost: 0, expenseCost: 0 }]));
 
   for (const v of vehicles) {
     for (const r of v.maintenanceRecords) {
@@ -122,11 +129,21 @@ export async function overview(req: Request, res: Response) {
       const entry = monthlyMap.get(key);
       if (entry) entry.fuelCost += Number(r.volume) * Number(r.unitPrice);
     }
+    for (const r of v.expenseRecords) {
+      const key = monthKey(r.date);
+      const entry = monthlyMap.get(key);
+      if (entry) entry.expenseCost += Number(r.amount);
+    }
   }
 
   const monthlyTrend = months.map((m) => {
     const entry = monthlyMap.get(m)!;
-    return { month: m, maintenanceCost: round2(entry.maintenanceCost), fuelCost: round2(entry.fuelCost) };
+    return {
+      month: m,
+      maintenanceCost: round2(entry.maintenanceCost),
+      fuelCost: round2(entry.fuelCost),
+      expenseCost: round2(entry.expenseCost),
+    };
   });
 
   res.json({
@@ -135,7 +152,8 @@ export async function overview(req: Request, res: Response) {
     totalVehicles: vehicles.length,
     totalMaintenanceCost,
     totalFuelCost,
-    totalCost: round2(totalMaintenanceCost + totalFuelCost),
+    totalExpenseCost,
+    totalCost: round2(totalMaintenanceCost + totalFuelCost + totalExpenseCost),
     perVehicle,
     monthlyTrend,
   });

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Card, Row, Col, Empty, Spin, Segmented } from "antd";
-import { CarOutlined, ToolOutlined, ThunderboltOutlined, DollarOutlined } from "@ant-design/icons";
+import { CarOutlined, ToolOutlined, ThunderboltOutlined, ShoppingOutlined, DollarOutlined } from "@ant-design/icons";
 import {
   ResponsiveContainer,
   PieChart,
@@ -29,9 +29,10 @@ interface OverviewStats {
   totalVehicles: number;
   totalMaintenanceCost: number;
   totalFuelCost: number;
+  totalExpenseCost: number;
   totalCost: number;
   perVehicle: { vehicleId: string; name: string; totalCost: number }[];
-  monthlyTrend: { month: string; maintenanceCost: number; fuelCost: number }[];
+  monthlyTrend: { month: string; maintenanceCost: number; fuelCost: number; expenseCost: number }[];
 }
 
 export default function Dashboard() {
@@ -111,6 +112,15 @@ export default function Dashboard() {
           />
         </Col>
         <Col xs={12} sm={6}>
+          <StatCard
+            title="其他消费总支出"
+            value={stats.totalExpenseCost}
+            precision={2}
+            prefix={<ShoppingOutlined />}
+            color={RECORD_THEME.expense.color}
+          />
+        </Col>
+        <Col xs={12} sm={6}>
           <StatCard title="总支出" value={stats.totalCost} precision={2} prefix={<DollarOutlined />} color={BRAND.primary} />
         </Col>
       </Row>
@@ -145,7 +155,8 @@ export default function Dashboard() {
                 <Tooltip formatter={(v: number) => v.toFixed(2)} />
                 <Legend />
                 <Bar dataKey="maintenanceCost" name="保养支出" stackId="a" fill={RECORD_THEME.maintenance.color} radius={[0, 0, 0, 0]} />
-                <Bar dataKey="fuelCost" name="加油支出" stackId="a" fill={RECORD_THEME.fuel.color} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="fuelCost" name="加油支出" stackId="a" fill={RECORD_THEME.fuel.color} radius={[0, 0, 0, 0]} />
+                <Bar dataKey="expenseCost" name="其他消费" stackId="a" fill={RECORD_THEME.expense.color} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </Card>

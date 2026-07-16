@@ -3,7 +3,8 @@ import { api } from "../api/client";
 
 interface AuthUser {
   id: string;
-  email: string;
+  username: string;
+  email: string | null;
   totpEnabled?: boolean;
   mustChangePassword?: boolean;
 }
@@ -11,9 +12,9 @@ interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ requiresTotp?: boolean; preAuthToken?: string }>;
+  login: (username: string, password: string) => Promise<{ requiresTotp?: boolean; preAuthToken?: string }>;
   loginTotp: (preAuthToken: string, code: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (username: string, password: string, email?: string) => Promise<void>;
   logout: () => void;
   refreshMe: () => Promise<void>;
 }
@@ -47,8 +48,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("refreshToken", data.refreshToken);
   }
 
-  async function login(email: string, password: string) {
-    const { data } = await api.post("/auth/login", { email, password });
+  async function login(username: string, password: string) {
+    const { data } = await api.post("/auth/login", { username, password });
     if (data.requiresTotp) {
       return { requiresTotp: true, preAuthToken: data.preAuthToken };
     }
@@ -63,8 +64,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
   }
 
-  async function register(email: string, password: string) {
-    const { data } = await api.post("/auth/register", { email, password });
+  async function register(username: string, password: string, email?: string) {
+    const { data } = await api.post("/auth/register", { username, password, email });
     storeTokens(data);
     setUser(data.user);
   }

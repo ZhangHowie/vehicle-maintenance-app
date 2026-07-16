@@ -10,14 +10,14 @@ export default function Register() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
-  async function onFinish(values: { email: string; password: string; confirm: string }) {
+  async function onFinish(values: { username: string; email?: string; password: string; confirm: string }) {
     if (values.password !== values.confirm) {
       message.error("两次输入的密码不一致");
       return;
     }
     setLoading(true);
     try {
-      await register(values.email, values.password);
+      await register(values.username, values.password, values.email || undefined);
       navigate("/");
     } catch (e: any) {
       message.error(e?.response?.data?.message ?? "注册失败");
@@ -29,7 +29,17 @@ export default function Register() {
   return (
     <AuthLayout title="注册账号" subtitle="创建账号，开始记录你的车辆">
       <Form layout="vertical" onFinish={onFinish}>
-        <Form.Item name="email" label="邮箱" rules={[{ required: true, type: "email" }]}>
+        <Form.Item
+          name="username"
+          label="用户名"
+          rules={[
+            { required: true, message: "请输入用户名" },
+            { pattern: /^[a-zA-Z0-9_]{3,32}$/, message: "3-32 位，只能包含字母、数字、下划线" },
+          ]}
+        >
+          <Input size="large" placeholder="用于登录，如 admin" />
+        </Form.Item>
+        <Form.Item name="email" label="邮箱（可选，用于找回密码）" rules={[{ type: "email", message: "邮箱格式不正确" }]}>
           <Input size="large" placeholder="you@example.com" />
         </Form.Item>
         <Form.Item

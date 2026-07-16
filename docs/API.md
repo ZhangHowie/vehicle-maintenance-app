@@ -14,8 +14,8 @@ Authorization: Bearer <accessToken>
 
 | 方法 | 路径 | 说明 | 请求体 | 需要登录 |
 |---|---|---|---|---|
-| POST | `/register` | 注册账号，成功后直接返回令牌 | `{ email, password }` | 否 |
-| POST | `/login` | 登录。若账号未开启两步验证，直接返回令牌；若已开启，返回 `{ requiresTotp: true, preAuthToken }` | `{ email, password }` | 否 |
+| POST | `/register` | 注册账号，成功后直接返回令牌 | `{ username, password, email? }` | 否 |
+| POST | `/login` | 登录。若账号未开启两步验证，直接返回令牌；若已开启，返回 `{ requiresTotp: true, preAuthToken }` | `{ username, password }` | 否 |
 | POST | `/login/totp` | 两步验证第二步，用 `preAuthToken` + 验证器 6 位码换取正式令牌 | `{ preAuthToken, code }` | 否 |
 | POST | `/refresh` | 用 refreshToken 换取新的 accessToken/refreshToken | `{ refreshToken }` | 否 |
 | POST | `/forgot-password` | 发送重置密码邮件（无论邮箱是否存在都返回相同提示，防止邮箱枚举） | `{ email }` | 否 |
@@ -30,13 +30,13 @@ Authorization: Bearer <accessToken>
 
 ```json
 {
-  "user": { "id": "uuid", "email": "a@b.com", "totpEnabled": false, "mustChangePassword": false },
+  "user": { "id": "uuid", "username": "admin", "email": null, "totpEnabled": false, "mustChangePassword": false },
   "accessToken": "...",
   "refreshToken": "..."
 }
 ```
 
-`mustChangePassword` 为 `true` 时（使用初始默认管理员账号首次登录），客户端应强制引导用户先调用 `/change-password` 修改密码，成功后该字段会变为 `false`，此后不再提示。首次启动如果数据库中还没有任何账号，会自动创建默认管理员账号（邮箱/密码见 `.env` 的 `ADMIN_EMAIL` / `ADMIN_PASSWORD`，默认见 README「默认账号」章节）。
+`mustChangePassword` 为 `true` 时（使用初始默认管理员账号首次登录），客户端应强制引导用户先调用 `/change-password` 修改密码，成功后该字段会变为 `false`，此后不再提示。首次启动如果数据库中还没有任何账号，会自动创建默认管理员账号（用户名/密码见 `.env` 的 `ADMIN_USERNAME` / `ADMIN_PASSWORD`，默认见 README「默认账号」章节）。`email` 是可选字段，只用于「忘记密码」找回，不填就没有找回密码入口。
 
 ## 车辆（设备）`/api/vehicles`
 
@@ -97,6 +97,19 @@ Authorization: Bearer <accessToken>
 
 计算方式：把"两次加满"之间（含中途任何未加满的补油）的加油量全部累加，除以这段的里程差，得到该段的百公里油耗。中途只要有一条记录 `lastRecorded=false`，说明这条之前有未记录的加油，累计的加油量不可信，会丢弃这一段并从下一次加满重新开始累计。车辆详情页展示的"最近百公里油耗"取 `recentLitersPer100km`（即 `segments` 中最后一段）。
 
+## 其他消费记录 `/api/vehicles/:vehicleId/expense-records`
+
+全部需要登录，且只能操作自己名下车辆。用于记录停车费、行车记录仪、脚垫等不属于保养或加油的杂项支出。
+
+| 方法 | 路径 | 说明 | 请求体 |
+|---|---|---|---|
+| GET | `/` | 获取该车辆全部消费记录 | - |
+| POST | `/` | 新建消费记录 | `{ date, item, amount, remark? }` |
+| PUT | `/:id` | 更新消费记录 | 同上 |
+| DELETE | `/:id` | 删除消费记录 | - |
+
+`item` 是消费项目名称（如"停车费"），`amount` 是金额，无需像保养记录那样拆分明细。
+
 ## 数据导入导出 `/api/data`
 
 全部需要登录，仅导入导出当前用户自己的数据。
@@ -112,12 +125,13 @@ Authorization: Bearer <accessToken>
 导出的 JSON 顶层带一个 `schemaVersion` 字段，标识车辆/记录/图片这部分数据结构的版本号，跟应用本身的版本号是两回事——只要这部分导出结构没变，应用升级多少次 `schemaVersion` 都不需要跟着变；只有导出结构发生不兼容变化时才会递增。`/import` 接口会根据这个字段自动兼容老版本导出的文件：
 
 - **v1**（早期版本导出的文件，字段名是 `version` 而不是 `schemaVersion`）：车辆基本信息 + 保养/油耗记录，不含封面图片。
-- **v2**（当前版本）：在 v1 基础上，每辆车新增 `coverImage`（封面图片，图片内容以 `dataBase64` 直接内嵌在 JSON 里，不是只存一个指向本机文件的 URL——这样导入到另一台机器、或者换了一个全新的 `uploads` 数据卷，图片依然能被正确恢复）和 `coverCrop`（封面裁剪范围）。
+- **v2**：在 v1 基础上，每辆车新增 `coverImage`（封面图片，图片内容以 `dataBase64` 直接内嵌在 JSON 里，不是只存一个指向本机文件的 URL——这样导入到另一台机器、或者换了一个全新的 `uploads` 数据卷，图片依然能被正确恢复）和 `coverCrop`（封面裁剪范围）。
+- **v3**（当前版本）：在 v2 基础上，每辆车新增 `expenseRecords`（其他消费记录）。v1/v2 文件没有这个字段，导入时按空数组处理，不影响导入。
 
 ```json
 {
-  "schemaVersion": 2,
-  "exportedAt": "2026-07-14T00:00:00.000Z",
+  "schemaVersion": 3,
+  "exportedAt": "2026-07-16T00:00:00.000Z",
   "vehicleCount": 2,
   "vehicles": [
     {
@@ -132,6 +146,9 @@ Authorization: Bearer <accessToken>
       "fuelRecords": [
         { "date": "2026-01-02T00:00:00.000Z", "mileage": 12100, "volume": 40, "unitPrice": 7.8,
           "fuelType": "P95", "isFullTank": true, "lastRecorded": true, "remark": null }
+      ],
+      "expenseRecords": [
+        { "date": "2026-01-03T00:00:00.000Z", "item": "停车费", "amount": 20, "remark": null }
       ]
     }
   ]
@@ -148,7 +165,7 @@ Authorization: Bearer <accessToken>
 成功响应：
 
 ```json
-{ "importedVehicles": 2, "importedMaintenance": 3, "importedFuel": 12, "importedImages": 1 }
+{ "importedVehicles": 2, "importedMaintenance": 3, "importedFuel": 12, "importedExpense": 5, "importedImages": 1 }
 ```
 
 ## 统计 `/api/stats`
@@ -170,12 +187,13 @@ Authorization: Bearer <accessToken>
   "totalVehicles": 2,
   "totalMaintenanceCost": 1280.5,
   "totalFuelCost": 3450.2,
-  "totalCost": 4730.7,
+  "totalExpenseCost": 260,
+  "totalCost": 4990.7,
   "perVehicle": [
-    { "vehicleId": "uuid", "name": "我的轿车", "maintenanceCost": 800, "fuelCost": 2000, "totalCost": 2800,
-      "fuelVolume": 320.5, "maintenanceRecordCount": 5, "fuelRecordCount": 20, "latestMileage": 35000 }
+    { "vehicleId": "uuid", "name": "我的轿车", "maintenanceCost": 800, "fuelCost": 2000, "expenseCost": 120, "totalCost": 2920,
+      "fuelVolume": 320.5, "maintenanceRecordCount": 5, "fuelRecordCount": 20, "expenseRecordCount": 3, "latestMileage": 35000 }
   ],
-  "monthlyTrend": [{ "month": "2026-01", "maintenanceCost": 100, "fuelCost": 300 }]
+  "monthlyTrend": [{ "month": "2026-01", "maintenanceCost": 100, "fuelCost": 300, "expenseCost": 20 }]
 }
 ```
 
@@ -196,4 +214,4 @@ Authorization: Bearer <accessToken>
 { "message": "错误描述" }
 ```
 
-常见状态码：`400` 参数错误、`401` 未登录或令牌失效、`403` IP 被拉黑、`404` 资源不存在或无权限、`409` 邮箱已注册、`423` 账号被临时锁定、`429` 请求过于频繁、`500` 服务器错误。
+常见状态码：`400` 参数错误、`401` 未登录或令牌失效、`403` IP 被拉黑、`404` 资源不存在或无权限、`409` 用户名或邮箱已注册、`423` 账号被临时锁定、`429` 请求过于频繁、`500` 服务器错误。
