@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma";
+import { buildVehicleWhere } from "../utils/scope";
 
 type VehicleWithRecords = Prisma.VehicleGetPayload<{
   include: { maintenanceRecords: true; fuelRecords: true; expenseRecords: true };
@@ -31,7 +32,7 @@ export async function overview(req: Request, res: Response) {
   const yearParam = parseYearParam(req.query.year);
 
   const vehicles: VehicleWithRecords[] = await prisma.vehicle.findMany({
-    where: { userId: req.userId! },
+    where: await buildVehicleWhere(req.userId!, req.userRole),
     include: { maintenanceRecords: true, fuelRecords: true, expenseRecords: true },
     orderBy: { createdAt: "asc" },
   });

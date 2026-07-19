@@ -20,7 +20,12 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+    // 只有"带着 accessToken 发出的请求"收到 401 才代表登录态过期，需要尝试刷新/跳登录页；
+    // 像登录接口本身返回的 401（用户名或密码错误）没有带 token，属于正常的业务错误，
+    // 应该原样 reject 让调用方（比如 Login.tsx 的 catch）弹出错误提示，而不是被这里当成
+    // "登录过期"清空 localStorage 并强制跳转，把错误提示直接冲掉。
+    const hadAuthHeader = Boolean(original?.headers?.Authorization);
+    if (hadAuthHeader && error.response?.status === 401 && !original._retry) {
       original._retry = true;
       const refreshToken = localStorage.getItem("refreshToken");
       if (!refreshToken) {

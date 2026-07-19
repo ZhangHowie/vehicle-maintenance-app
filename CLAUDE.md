@@ -69,7 +69,12 @@ cd frontend && npm install && npm run dev
 docker compose -f docker-compose.build.yml up -d --build
 ```
 
-改完代码后照旧 `git add -A && git commit && git push`，push 到 `main` 会自动触发 CI 构建新镜像；正式部署的 NAS 那边执行 `docker compose pull && docker compose up -d` 更新到最新镜像。
+**push 到 GitHub 之前必须先本地验证过，这是硬性要求，不能跳过：**
+1. 本地把改动的部分打包/编译成功（如 `tsc -b`、`vite build`，或 `docker compose -f docker-compose.build.yml up -d --build` 整体构建）。
+2. 启动前端服务（`npm run dev` 或构建后的容器），让用户在浏览器里实际看一下改动。
+3. 等用户明确确认"没问题"了，再执行 `git add -A && git commit && git push`。
+
+不要在没有本机验证、没有得到用户确认的情况下直接 push。push 到 `main` 会自动触发 CI 构建新镜像并推送 Docker Hub；正式部署的 NAS 那边执行 `docker compose pull && docker compose up -d` 更新到最新镜像——一旦 push 出去镜像就会被拉去部署，所以这一步要谨慎，验证要做在 push 之前而不是之后。
 
 ## 会话变更记录（按时间顺序，早到晚）
 

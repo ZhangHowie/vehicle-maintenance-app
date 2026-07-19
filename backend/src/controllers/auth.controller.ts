@@ -9,13 +9,11 @@ import { hashPassword, verifyPassword, isStrongPassword, generateRandomToken } f
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt";
 import { sendPasswordResetEmail } from "../utils/mailer";
 import { generateTotpSecret, generateQrCodeDataUrl, verifyTotpToken } from "../utils/totp";
+import { isMultiUserEnabled } from "../utils/scope";
+import { usernameSchema } from "../utils/validation";
 
 const registerSchema = z.object({
-  username: z
-    .string()
-    .min(3, "用户名至少 3 位")
-    .max(32, "用户名最多 32 位")
-    .regex(/^[a-zA-Z0-9_]+$/, "用户名只能包含字母、数字、下划线"),
+  username: usernameSchema,
   // 邮箱可选，只用于找回密码；不填的话就没有找回密码入口
   email: z.string().email("邮箱格式不正确").optional().or(z.literal("").transform(() => undefined)),
   password: z.string().min(8, "密码至少 8 位"),
@@ -64,6 +62,7 @@ function toUserResponse(user: {
   id: string;
   username: string;
   email: string | null;
+  role: "ADMIN" | "USER";
   totpEnabled: boolean;
   mustChangePassword: boolean;
 }) {
@@ -71,12 +70,17 @@ function toUserResponse(user: {
     id: user.id,
     username: user.username,
     email: user.email,
+    role: user.role,
     totpEnabled: user.totpEnabled,
     mustChangePassword: user.mustChangePassword,
   };
 }
 
 export async function register(req: Request, res: Response) {
+  // 默认单用户模式下不开放注册，只有 ADMIN 在设置里主动开启多用户之后才允许
+  if (!(await isMultiUserEnabled())) {
+    throw new ApiError(403, "多用户功能未开启，暂不支持注册新账号，请联系管理员在设置中开启");
+  }
   const body = registerSchema.parse(req.body);
   if (!isStrongPassword(body.password)) {
     throw new ApiError(400, "密码至少 8 位，且需包含大小写字母和数字");
@@ -220,6 +224,15 @@ export async function resetPassword(req: Request, res: Response) {
 
 export async function me(req: Request, res: Response) {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! } });
+  res.json(toUserResponse(user));
+}
+
+export async function updateMe(req: Request, res: Response) {
+  const schema = z.object({ username: usernameSchema });
+  const { username } = schema.parse(req.body);
+  const existing = await prisma.user.findUnique({ where: { username } });
+  if (existing && existing.id !== req.userId) throw new ApiError(409, "该用户名已被使用");
+  const user = await prisma.user.update({ where: { id: req.userId! }, data: { username } });
   res.json(toUserResponse(user));
 }
 

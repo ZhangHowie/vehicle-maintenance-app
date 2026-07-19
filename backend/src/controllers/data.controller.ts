@@ -8,6 +8,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { ApiError } from "../middleware/errorHandler";
 import { toPlain } from "../utils/serialize";
+import { buildVehicleWhere } from "../utils/scope";
 
 // ============================================================================
 // 导出 / 导入数据格式说明
@@ -127,17 +128,18 @@ async function buildExportPayload(vehiclesRaw: Awaited<ReturnType<typeof fetchVe
   };
 }
 
-function fetchVehiclesForExport(userId: string) {
+async function fetchVehiclesForExport(userId: string, userRole: Request["userRole"]) {
   return prisma.vehicle.findMany({
-    where: { userId },
+    where: await buildVehicleWhere(userId, userRole),
     include: { maintenanceRecords: { include: { items: true } }, fuelRecords: true, expenseRecords: true },
     orderBy: { createdAt: "asc" },
   });
 }
 
-// 导出当前用户的全部数据（所有车辆 + 保养记录 + 油耗记录 + 封面图片）为 JSON，用于备份/迁移。
+// 导出数据为 JSON，用于备份/迁移：单用户模式下 ADMIN 导出的是系统里所有账号的数据，
+// 其它情况（普通账号，或已开启多用户）只导出当前账号自己的数据。
 export async function exportData(req: Request, res: Response) {
-  const vehiclesRaw = await fetchVehiclesForExport(req.userId!);
+  const vehiclesRaw = await fetchVehiclesForExport(req.userId!, req.userRole);
   const payload = await buildExportPayload(vehiclesRaw);
 
   const format = (req.query.format as string) ?? "json";

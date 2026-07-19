@@ -14,6 +14,7 @@ router.post("/forgot-password", authLimiter, asyncHandler(auth.forgotPassword));
 router.post("/reset-password", authLimiter, asyncHandler(auth.resetPassword));
 
 router.get("/me", requireAuth, asyncHandler(auth.me));
+router.patch("/me", requireAuth, asyncHandler(auth.updateMe));
 router.post("/change-password", requireAuth, asyncHandler(auth.changePassword));
 router.post("/totp/setup", requireAuth, asyncHandler(auth.totpSetup));
 router.post("/totp/enable", requireAuth, asyncHandler(auth.totpEnable));

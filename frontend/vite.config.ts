@@ -12,6 +12,12 @@ export default defineConfig({
       // registerSW.js（那个版本只 register()，检测到新版本后不会自动刷新页面）。
       injectRegister: false,
       includeAssets: ["favicon.svg", "icons/apple-touch-icon.png"],
+      workbox: {
+        // heic2any 是仅在用户选择 HEIC 图片时才会用到的转换库（~1.3MB），
+        // 预缓存进 Service Worker 只会拖慢每次新版本发布后的后台更新下载，
+        // 增大"长时间没打开、回来后第一次刷新还在用旧版本"这个窗口期，排除掉改成按需网络加载。
+        globIgnores: ["**/heic2any-*.js"],
+      },
       manifest: {
         name: "车辆保养管理",
         short_name: "车辆保养",

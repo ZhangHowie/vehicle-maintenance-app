@@ -17,12 +17,20 @@ enum FuelType {
   ELECTRIC
 }
 
+enum Role {
+  ADMIN
+  USER
+}
+
 model User {
   id                 String    @id @default(uuid())
   // 登录用账号名，取代原来"用邮箱登录"的方式；email 改为可选，仅用于找回密码邮件
   username           String    @unique
   email              String?   @unique
   passwordHash       String
+  // ADMIN：系统初始化时自动创建的那个账号（迁移时把历史数据里最早注册的账号回填为 ADMIN）。
+  // 单用户模式（SystemSetting.multiUserEnabled = false）下，ADMIN 能看到系统里所有账号的数据。
+  role               Role      @default(USER)
   totpSecret         String?
   totpEnabled        Boolean   @default(false)
   failedLoginCount   Int       @default(0)
@@ -36,6 +44,14 @@ model User {
 
   vehicles      Vehicle[]
   loginAttempts LoginAttempt[]
+}
+
+// 全局系统设置，单例表（固定只有 id=1 这一行）。
+// multiUserEnabled 默认 false：单用户模式下不开放注册，ADMIN 账号能读取所有用户的数据；
+// 由 ADMIN 在设置页里主动开启后，才切换成正常的多用户隔离（各账号只能看到自己的数据）。
+model SystemSetting {
+  id               Int     @id @default(1)
+  multiUserEnabled Boolean @default(false)
 }
 
 // 登录尝试记录，用于暴力破解检测与审计

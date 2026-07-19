@@ -1,8 +1,10 @@
 import { Request, Response } from "express";
 import { z } from "zod";
+import { Role } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { ApiError } from "../middleware/errorHandler";
 import { toPlain } from "../utils/serialize";
+import { canAccessVehicleOwnedBy } from "../utils/scope";
 
 const fuelTypeEnum = z.enum(["P92", "P95", "P98", "DIESEL", "ELECTRIC"]);
 
@@ -21,20 +23,20 @@ const fuelRecordSchema = z.object({
   remark: z.string().nullable().optional(),
 });
 
-async function ensureVehicleOwnership(vehicleId: string, userId: string) {
+async function ensureVehicleOwnership(vehicleId: string, userId: string, userRole: Role | undefined) {
   const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
-  if (!vehicle || vehicle.userId !== userId) throw new ApiError(404, "车辆不存在");
+  if (!vehicle || !(await canAccessVehicleOwnedBy(userId, userRole, vehicle.userId))) throw new ApiError(404, "车辆不存在");
   return vehicle;
 }
 
-async function ensureRecordOwnership(recordId: string, userId: string) {
+async function ensureRecordOwnership(recordId: string, userId: string, userRole: Role | undefined) {
   const record = await prisma.fuelRecord.findUnique({ where: { id: recordId }, include: { vehicle: true } });
-  if (!record || record.vehicle.userId !== userId) throw new ApiError(404, "油耗记录不存在");
+  if (!record || !(await canAccessVehicleOwnedBy(userId, userRole, record.vehicle.userId))) throw new ApiError(404, "油耗记录不存在");
   return record;
 }
 
 export async function listFuelRecords(req: Request, res: Response) {
-  await ensureVehicleOwnership(req.params.vehicleId, req.userId!);
+  await ensureVehicleOwnership(req.params.vehicleId, req.userId!, req.userRole);
   const records = await prisma.fuelRecord.findMany({
     where: { vehicleId: req.params.vehicleId },
     orderBy: { date: "desc" },
@@ -43,7 +45,7 @@ export async function listFuelRecords(req: Request, res: Response) {
 }
 
 export async function createFuelRecord(req: Request, res: Response) {
-  await ensureVehicleOwnership(req.params.vehicleId, req.userId!);
+  await ensureVehicleOwnership(req.params.vehicleId, req.userId!, req.userRole);
   const body = fuelRecordSchema.parse(req.body);
   const record = await prisma.fuelRecord.create({
     data: { ...body, date: new Date(body.date), vehicleId: req.params.vehicleId },
@@ -52,7 +54,7 @@ export async function createFuelRecord(req: Request, res: Response) {
 }
 
 export async function updateFuelRecord(req: Request, res: Response) {
-  await ensureRecordOwnership(req.params.id, req.userId!);
+  await ensureRecordOwnership(req.params.id, req.userId!, req.userRole);
   const body = fuelRecordSchema.parse(req.body);
   const record = await prisma.fuelRecord.update({
     where: { id: req.params.id },
@@ -62,7 +64,7 @@ export async function updateFuelRecord(req: Request, res: Response) {
 }
 
 export async function deleteFuelRecord(req: Request, res: Response) {
-  await ensureRecordOwnership(req.params.id, req.userId!);
+  await ensureRecordOwnership(req.params.id, req.userId!, req.userRole);
   await prisma.fuelRecord.delete({ where: { id: req.params.id } });
   res.status(204).send();
 }
@@ -73,7 +75,7 @@ export async function deleteFuelRecord(req: Request, res: Response) {
 // - 只要中间任何一条记录的"上次是否记录"（lastRecorded）为 false，说明这条记录之前有一次没被记录的
 //   加油，累计的加油量不可信，直接丢弃这一段；如果这条记录本身是加满，则以它为起点重新开始累计。
 export async function fuelStats(req: Request, res: Response) {
-  await ensureVehicleOwnership(req.params.vehicleId, req.userId!);
+  await ensureVehicleOwnership(req.params.vehicleId, req.userId!, req.userRole);
   const records = await prisma.fuelRecord.findMany({
     where: { vehicleId: req.params.vehicleId },
     orderBy: { mileage: "asc" },

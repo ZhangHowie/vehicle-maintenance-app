@@ -5,6 +5,7 @@ interface AuthUser {
   id: string;
   username: string;
   email: string | null;
+  role?: "ADMIN" | "USER";
   totpEnabled?: boolean;
   mustChangePassword?: boolean;
 }

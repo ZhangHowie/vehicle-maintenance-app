@@ -4,11 +4,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import AuthLayout from "../components/AuthLayout";
 import { BRAND } from "../theme";
+import { useMultiUserStatus } from "../hooks/useMultiUserStatus";
 
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const multiUserEnabled = useMultiUserStatus();
 
   async function onFinish(values: { username: string; email?: string; password: string; confirm: string }) {
     if (values.password !== values.confirm) {
@@ -24,6 +26,19 @@ export default function Register() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (multiUserEnabled === false) {
+    return (
+      <AuthLayout title="注册账号" subtitle="创建账号，开始记录你的车辆">
+        <div style={{ color: "#888", fontSize: 13, lineHeight: 1.8 }}>
+          多用户功能未开启，暂不支持注册新账号，请联系管理员在"设置"页中开启。
+        </div>
+        <div style={{ marginTop: 14, textAlign: "center", fontSize: 13 }}>
+          <Link to="/login">返回登录</Link>
+        </div>
+      </AuthLayout>
+    );
   }
 
   return (

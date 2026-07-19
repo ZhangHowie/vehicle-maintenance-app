@@ -12,6 +12,8 @@ import authRoutes from "./routes/auth.routes";
 import vehicleRoutes from "./routes/vehicle.routes";
 import dataRoutes from "./routes/data.routes";
 import statsRoutes from "./routes/stats.routes";
+import settingsRoutes from "./routes/settings.routes";
+import usersRoutes from "./routes/users.routes";
 
 const app = express();
 
@@ -46,6 +48,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/data", dataRoutes);
 app.use("/api/stats", statsRoutes);
+app.use("/api/settings", settingsRoutes);
+app.use("/api/users", usersRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

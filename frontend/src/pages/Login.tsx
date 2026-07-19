@@ -4,10 +4,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import AuthLayout from "../components/AuthLayout";
 import { BRAND } from "../theme";
+import { useMultiUserStatus } from "../hooks/useMultiUserStatus";
 
 export default function Login() {
   const { login, loginTotp } = useAuth();
   const navigate = useNavigate();
+  const multiUserEnabled = useMultiUserStatus();
   const [loading, setLoading] = useState(false);
   const [preAuthToken, setPreAuthToken] = useState<string | null>(null);
 
@@ -69,7 +71,7 @@ export default function Login() {
         </Button>
         <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", fontSize: 13 }}>
           <Link to="/forgot-password">忘记密码？</Link>
-          <Link to="/register">注册新账号</Link>
+          {multiUserEnabled && <Link to="/register">注册新账号</Link>}
         </div>
       </Form>
     </AuthLayout>

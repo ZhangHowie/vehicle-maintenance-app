@@ -10,6 +10,12 @@ RUN npm install
 COPY . .
 RUN npx prisma generate
 RUN npm run build
+# 在这里（而不是在 runtime stage）把 devDependencies 剪掉，runtime 直接 COPY 这份
+# node_modules。原因：GitHub Actions 用 QEMU 模拟构建 linux/arm64 时，runtime stage 里
+# 第二次跑完整 `npm install --omit=dev`（要跑几百个包的下载/链接/脚本）高概率触发
+# "qemu: uncaught target signal 4 (Illegal instruction)" 导致 arm64 构建失败；
+# prune 只做本地文件删除，轻量得多，QEMU 下不容易崩。
+RUN npm prune --omit=dev
 
 # ---- runtime stage ----
 FROM node:20-alpine
@@ -20,11 +26,10 @@ ENV NODE_ENV=production
 ARG GIT_COMMIT=unknown
 ENV GIT_COMMIT=$GIT_COMMIT
 RUN apk add --no-cache openssl
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev
+COPY package.json ./
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
+# node_modules 在 build stage 已经 prune 过（含 .prisma/@prisma 的引擎产物），直接整体拷贝
+COPY --from=build /app/node_modules ./node_modules
 COPY prisma ./prisma
 RUN mkdir -p /app/uploads
 EXPOSE 3000

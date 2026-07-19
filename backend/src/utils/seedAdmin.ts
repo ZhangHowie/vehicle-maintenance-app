@@ -16,6 +16,7 @@ export async function ensureDefaultAdmin(): Promise<void> {
       email: env.adminEmail ?? null,
       passwordHash,
       mustChangePassword: true,
+      role: "ADMIN",
     },
   });
 
